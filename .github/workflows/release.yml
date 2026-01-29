@@ -1,0 +1,15 @@
+name: Release Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+    docker:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - name: Build images
+          run: |
+            docker build -t marketlens-api:${GITHUB_REF_NAME} -f infra/docker/Dockerfile.api .

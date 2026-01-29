@@ -1,0 +1,33 @@
+# OS
+.DS_Store
+
+# Env
+.env
+*.local
+
+# Go
+**/bin/
+**/dist/
+**/*.test
+**/*.out
+
+# Node
+**/node_modules/
+**/.next/
+**/build/
+**/coverage/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+
+# Terraform
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+
+# Docker
+**/*.pid
