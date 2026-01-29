@@ -1,10 +1,10 @@
 FROM golang:1.22-alpine AS build
 WORKDIR /app
 
-COPY services/api/go.mod services/api/go.sum ./services/api/
-RUN cd services/api && go mod download
-
+COPY services/api/go.mod ./services/api/go.mod
 COPY services/api ./services/api
+
+RUN cd services/api && go mod tidy && go mod download
 RUN cd services/api && CGO_ENABLED=0 go build -o /bin/marketlens-api ./cmd/server
 
 FROM alpine:3.20
