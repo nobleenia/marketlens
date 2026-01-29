@@ -9,12 +9,29 @@ import (
 	"syscall"
 	"time"
 
+	"marketlens/internal/cache"
 	"marketlens/internal/config"
 	"marketlens/internal/httpserver"
+	"marketlens/internal/store"
 )
 
 func main() {
 	cfg := config.FromEnv()
+
+	// dependency initialization
+	db, err := store.NewPostgresPool(context.Background(), cfg)
+	if err != nil {
+		log.Fatalf("failed to initialize postgres: %v", err)
+	}
+	defer db.Close()
+
+	rdb, err := cache.NewRedisClient(context.Background(), cfg)
+	if err != nil {
+		log.Fatalf("failed to initialize redis: %v", err)
+	}
+	defer func() {
+		_ = rdb.Close()
+	}()
 
 	srv := httpserver.New(cfg)
 
