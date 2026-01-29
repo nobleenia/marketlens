@@ -4,6 +4,8 @@ go 1.24.0
 
 toolchain go1.24.4
 
+// toolchain go1.24.4
+
 require (
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/redis/go-redis/v9 v9.17.3
