@@ -1,6 +1,6 @@
 .PHONY: help up down logs ps api-test api-lint dash-install dash-lint dash-build migrate seed
 
-COMPOSE = docker compose -f infra/docker/docker-compose.yml
+COMPOSE = docker compose -p marketlens -f infra/docker/docker-compose.yml
 API_DIR = services/api
 DASH_DIR = apps/admin-dashboard
 
@@ -15,7 +15,7 @@ help:
 	@echo "  make dash-install   Install dashboard deps"
 	@echo "  make dash-lint      Lint dashboard"
 	@echo "  make dash-build     Build dashboard"
-	@echo "  make migrate        Run DB migrations (placeholder)"
+# 	@echo "  make migrate        Run DB migrations (placeholder)"
 	@echo "  make seed           Seed DB (placeholder)"
 
 up:
@@ -45,8 +45,17 @@ dash-lint:
 dash-build:
 	cd $(DASH_DIR) && npm run build
 
-migrate:
-	@echo "TODO: wire migration runner (e.g. golang-migrate)"; exit 1
+migrate-up:
+	cd services/api && go run ./cmd/migrate -action=up -dir=migrations
+
+migrate-down:
+	cd services/api && go run ./cmd/migrate -action=down -dir=migrations
+
+migrate-status:
+	cd services/api && go run ./cmd/migrate -action=status -dir=migrations
+
+migrate-redo:
+	cd services/api && go run ./cmd/migrate -action=redo -dir=migrations
 
 seed:
 	@echo "TODO: implement scripts/seed"; exit 1
