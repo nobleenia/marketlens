@@ -6,12 +6,16 @@ COPY services/api ./services/api
 
 RUN cd services/api && go mod tidy && go mod download
 RUN cd services/api && CGO_ENABLED=0 go build -o /bin/marketlens-api ./cmd/server
+RUN cd services/api && CGO_ENABLED=0 go build -o /bin/marketlens-migrate ./cmd/migrate
 
 FROM alpine:3.20
 RUN adduser -D appuser
 USER appuser
 WORKDIR /home/appuser
 
+COPY --from=build /app/services/api/migrations ./migrations
+
 COPY --from=build /bin/marketlens-api ./marketlens-api
+COPY --from=build /bin/marketlens-migrate ./marketlens-migrate
 EXPOSE 8080
 ENTRYPOINT ["./marketlens-api"]

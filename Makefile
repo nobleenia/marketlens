@@ -46,16 +46,16 @@ dash-build:
 	cd $(DASH_DIR) && npm run build
 
 migrate-up:
-	cd services/api && go run ./cmd/migrate -action=up -dir=migrations
+	$(COMPOSE) exec -T api ./marketlens-migrate -action=up -dir=/home/appuser/migrations
 
 migrate-down:
-	cd services/api && go run ./cmd/migrate -action=down -dir=migrations
+	$(COMPOSE) exec -T api ./marketlens-migrate -action=down -dir=/home/appuser/migrations
 
 migrate-status:
-	cd services/api && go run ./cmd/migrate -action=status -dir=migrations
+	$(COMPOSE) exec -T api ./marketlens-migrate -action=status -dir=/home/appuser/migrations
 
 migrate-redo:
-	cd services/api && go run ./cmd/migrate -action=redo -dir=migrations
+	$(COMPOSE) exec -T api ./marketlens-migrate -action=redo -dir=/home/appuser/migrations
 
 seed:
 	@echo "TODO: implement scripts/seed"; exit 1
