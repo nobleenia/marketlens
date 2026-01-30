@@ -36,6 +36,9 @@ api-test:
 api-lint:
 	cd $(API_DIR) && test -z "$$(gofmt -l .)"
 
+api-rebuild:
+	$(COMPOSE) up -d --build api
+
 dash-install:
 	cd $(DASH_DIR) && npm ci
 

@@ -43,3 +43,4 @@ services:
 
 volumes:
   pgdata:
+  - ../../services/api/migrations:/home/appuser/migrations:ro
