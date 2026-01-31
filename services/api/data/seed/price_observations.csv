@@ -1,0 +1,10 @@
+observed_at,crop_name,market_name,state,price,currency,unit,source,reporter_id,notes
+2026-01-28T10:00:00Z,Tomato,Mile 12,Lagos,16200,NGN,basket,csv,enum-001,morning quote
+2026-01-29T10:00:00Z,Tomato,Mile 12,Lagos,18500,NGN,basket,csv,enum-001,morning quote
+2026-01-29T10:15:00Z,Tomato,Oyingbo,Lagos,17200,NGN,basket,csv,enum-002,morning quote
+2026-01-29T11:00:00Z,Tomato,Bodija,Oyo,16900,NGN,basket,csv,enum-003,morning quote
+2026-01-29T09:30:00Z,Maize,Bodija,Oyo,820,NGN,kg,csv,enum-003,bulk
+2026-01-29T09:45:00Z,Rice,Wuse Market,FCT,1250,NGN,kg,csv,enum-004,local rice
+2026-01-29T12:00:00Z,Beans,Main Market,Kano,980,NGN,kg,csv,enum-005,brown beans
+2026-01-30T10:00:00Z,Tomato,Mile 12,Lagos,17800,NGN,basket,csv,enum-001,midweek dip
+2026-01-30T10:10:00Z,Maize,Mile 12,Lagos,900,NGN,kg,csv,enum-001,retail

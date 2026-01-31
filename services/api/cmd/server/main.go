@@ -19,7 +19,7 @@ func main() {
 	cfg := config.FromEnv()
 
 	// dependency initialization
-	db, err := store.NewPostgresPool(context.Background(), cfg)
+	db, err := store.NewPostgres(context.Background(), cfg.PostgresDSN())
 	if err != nil {
 		log.Fatalf("failed to initialize postgres: %v", err)
 	}

@@ -1,6 +1,20 @@
 package config
 
-import "os"
+import (
+	"fmt"
+	"os"
+)
+
+func (c Config) PostgresDSN() string {
+	return fmt.Sprintf(
+		"postgresql://%s:%s@%s:%s/%s?sslmode=disable",
+		c.PostgresUser,
+		c.PostgresPassword,
+		c.PostgresHost,
+		c.PostgresPort,
+		c.PostgresDB,
+	)
+}
 
 type Config struct {
 	Env  string
@@ -8,9 +22,9 @@ type Config struct {
 
 	PostgresHost     string
 	PostgresPort     string
-	PostgresDB       string
 	PostgresUser     string
 	PostgresPassword string
+	PostgresDB       string
 
 	RedisHost string
 	RedisPort string

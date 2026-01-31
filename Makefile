@@ -60,5 +60,8 @@ migrate-status:
 migrate-redo:
 	$(COMPOSE) exec -T api ./marketlens-migrate -action=redo -dir=/home/appuser/migrations
 
+ingest:
+	$(COMPOSE) exec -T api ./marketlens-ingest -file=$(FILE)
+
 seed:
 	@echo "TODO: implement scripts/seed"; exit 1

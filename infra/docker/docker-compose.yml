@@ -40,7 +40,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - ../../services/api/migrations:/home/appuser/migrations:ro
 
 volumes:
-  pgdata:
-  - ../../services/api/migrations:/home/appuser/migrations:ro
+  pgdata: {}
