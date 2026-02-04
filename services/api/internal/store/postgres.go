@@ -89,6 +89,38 @@ func (pg *Postgres) LookupMarketID(ctx context.Context, marketName, state string
 	return marketID, nil
 }
 
+func (pg *Postgres) GetObservationsForAggregation(ctx context.Context, cropID, marketID string, from time.Time, to time.Time) ([]PriceObservation, error) {
+	rows, err := pg.pool.Query(ctx, `
+		SELECT crop_id, market_id, observed_at, price, currency, unit, source, reporter_id, notes, confidence_score
+		FROM price_observations
+		WHERE crop_id = $1 AND market_id = $2 AND observed_at >= $3 AND observed_at <= $4
+	`, cropID, marketID, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("GetObservationsForAggregation: %w", err)
+	}
+	defer rows.Close()
+
+	var observations []PriceObservation
+	for rows.Next() {
+		var obs PriceObservation
+		if err := rows.Scan(&obs.CropID, &obs.MarketID, &obs.ObservedAt, &obs.Price,
+			&obs.Currency, &obs.Unit, &obs.Source, &obs.ReporterID, &obs.Notes,
+			&obs.ConfidenceScore); err != nil {
+			return nil, fmt.Errorf("GetObservationsForAggregation scan: %w", err)
+		}
+		observations = append(observations, obs)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("GetObservationsForAggregation rows: %w", err)
+	}
+
+	return observations, nil
+}
+
+func (pg *Postgres) Ping(ctx context.Context) error {
+	return pg.pool.Ping(ctx)
+}
+
 func (pg *Postgres) Close() {
 	pg.pool.Close()
 }
