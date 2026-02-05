@@ -3,8 +3,10 @@ package store
 import (
 	"context"
 	"fmt"
+	"marketlens/internal/models"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -39,20 +41,15 @@ func NewPostgres(ctx context.Context, dsn string) (*Postgres, error) {
 	return &Postgres{pool: pool}, nil
 }
 
-type PriceObservation struct {
-	CropID          string
-	MarketID        string
-	ObservedAt      time.Time
-	Price           float64
-	Currency        string
-	Unit            string
-	Source          string
-	ReporterID      string
-	Notes           string
-	ConfidenceScore float64
+func (pg *Postgres) Ping(ctx context.Context) error {
+	return pg.pool.Ping(ctx)
 }
 
-func (pg *Postgres) InsertPriceObservation(ctx context.Context, obs PriceObservation) error {
+func (pg *Postgres) Close() {
+	pg.pool.Close()
+}
+
+func (pg *Postgres) InsertPriceObservation(ctx context.Context, obs models.PriceObservation) error {
 	_, err := pg.pool.Exec(ctx, `
 		INSERT INTO price_observations
 		(crop_id, market_id, observed_at, price, currency, unit, source, reporter_id, notes, confidence_score)
@@ -89,7 +86,7 @@ func (pg *Postgres) LookupMarketID(ctx context.Context, marketName, state string
 	return marketID, nil
 }
 
-func (pg *Postgres) GetObservationsForAggregation(ctx context.Context, cropID, marketID string, from time.Time, to time.Time) ([]PriceObservation, error) {
+func (pg *Postgres) GetObservationsForAggregation(ctx context.Context, cropID, marketID string, from time.Time, to time.Time) ([]models.PriceObservation, error) {
 	rows, err := pg.pool.Query(ctx, `
 		SELECT crop_id, market_id, observed_at, price, currency, unit, source, reporter_id, notes, confidence_score
 		FROM price_observations
@@ -100,9 +97,9 @@ func (pg *Postgres) GetObservationsForAggregation(ctx context.Context, cropID, m
 	}
 	defer rows.Close()
 
-	var observations []PriceObservation
+	var observations []models.PriceObservation
 	for rows.Next() {
-		var obs PriceObservation
+		var obs models.PriceObservation
 		if err := rows.Scan(&obs.CropID, &obs.MarketID, &obs.ObservedAt, &obs.Price,
 			&obs.Currency, &obs.Unit, &obs.Source, &obs.ReporterID, &obs.Notes,
 			&obs.ConfidenceScore); err != nil {
@@ -117,10 +114,62 @@ func (pg *Postgres) GetObservationsForAggregation(ctx context.Context, cropID, m
 	return observations, nil
 }
 
-func (pg *Postgres) Ping(ctx context.Context) error {
-	return pg.pool.Ping(ctx)
+func (pg *Postgres) GetLatestAggregatedPrice(ctx context.Context, cropID, marketID, period string) (*models.AggregatedPrice, error) {
+	var agg models.AggregatedPrice
+	var confidenceScore float64
+
+	err := pg.pool.QueryRow(ctx, `
+		SELECT id, crop_id, market_id, period, period_start, period_end,
+		       price_min, price_max, price_mean, price_median,
+		       currency, unit, confidence_score, sample_size,
+		       created_at, updated_at
+		FROM aggregated_prices
+		WHERE crop_id = $1 AND market_id = $2 AND period = $3
+		ORDER BY period_end DESC
+		LIMIT 1
+	`, cropID, marketID, period).Scan(
+		&agg.ID, &agg.CropID, &agg.MarketID, &agg.Period,
+		&agg.PeriodStart, &agg.PeriodEnd, &agg.PriceMin,
+		&agg.PriceMax, &agg.PriceMean, &agg.PriceMedian,
+		&agg.Currency, &agg.Unit, &confidenceScore,
+		&agg.SampleSize, &agg.CreatedAt, &agg.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil // no aggregated price found, return nil without error
+		}
+		return nil, fmt.Errorf("GetLatestAggregatedPrice: %w", err)
+	}
+	agg.Confidence = models.ScoreToConfidenceLevel(confidenceScore)
+	return &agg, nil
 }
 
-func (pg *Postgres) Close() {
-	pg.pool.Close()
+func (pg *Postgres) UpsertAggregatedPrice(ctx context.Context, agg models.AggregatedPrice) error {
+	confidenceScore := agg.Confidence.ToScore()
+
+	_, err := pg.pool.Exec(ctx, `
+		INSERT INTO aggregated_prices (
+			crop_id, market_id, period, period_start, period_end,
+		    price_min, price_max, price_mean, price_median,
+		    currency, unit, confidence_score, sample_size, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+		ON CONFLICT (crop_id, market_id, period, period_start, period_end)
+		DO UPDATE SET 
+			price_min = EXCLUDED.price_min,
+		    price_max = EXCLUDED.price_max,
+		    price_mean = EXCLUDED.price_mean,
+		    price_median = EXCLUDED.price_median,
+		    currency = EXCLUDED.currency,
+		    unit = EXCLUDED.unit,
+		    confidence_score = EXCLUDED.confidence_score,
+		    sample_size = EXCLUDED.sample_size,
+		    updated_at = NOW()
+	`, agg.CropID, agg.MarketID, agg.Period, agg.PeriodStart, agg.PeriodEnd,
+		agg.PriceMin, agg.PriceMax, agg.PriceMean, agg.PriceMedian,
+		agg.Currency, agg.Unit, confidenceScore, agg.SampleSize,
+	)
+	if err != nil {
+		return fmt.Errorf("UpsertAggregatedPrice: %w", err)
+	}
+	return nil
 }

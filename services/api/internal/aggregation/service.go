@@ -1,6 +1,7 @@
 package aggregation
 
 import (
+	"marketlens/internal/models"
 	"math"
 	"sort"
 	"time"
@@ -100,15 +101,6 @@ func findMinAndMax(prices []float64) (min float64, max float64) {
 	return min, max
 }
 
-// ConfidenceLevel represents the confidence in an aggregated price.
-type ConfidenceLevel string
-
-const (
-	ConfidenceHigh   ConfidenceLevel = "high"
-	ConfidenceMedium ConfidenceLevel = "medium"
-	ConfidenceLow    ConfidenceLevel = "low"
-)
-
 // Confidence thresholds (as percentages)
 const (
 	CVThresholdHigh   = 15.0 // CV must be <= 15% for high confidence
@@ -119,53 +111,19 @@ const (
 
 // DetermineConfidenceLevel determines confidence based on sample size and CV.
 // CV is expected as a percentage (e.g., 10.0 means 10%).
-func DetermineConfidenceLevel(sampleSize int, coefficientOfVariation float64) ConfidenceLevel {
-	// Not enough data = low confidence
-	if sampleSize < MinSamplesMedium {
-		return ConfidenceLow
+func DetermineConfidenceLevel(sampleSize int, coefficientOfVariation float64) models.ConfidenceLevel {
+	if sampleSize < MinSamplesMedium || coefficientOfVariation > CVThresholdMedium {
+		return models.ConfidenceLow
 	}
-
-	// High variance = low confidence
-	if coefficientOfVariation > CVThresholdMedium {
-		return ConfidenceLow
-	}
-
-	// High confidence: many samples AND low variance
 	if sampleSize >= MinSamplesHigh && coefficientOfVariation <= CVThresholdHigh {
-		return ConfidenceHigh
+		return models.ConfidenceHigh
 	}
-
-	// Everything else is medium
-	return ConfidenceMedium
-}
-
-// PriceObservation represents a single price observation for aggregation.
-type PriceObservation struct {
-	CropID   string
-	MarketID string
-	Price    float64
-}
-
-// AggregatedPrice represents the result of price aggregation.
-type AggregatedPrice struct {
-	CropID         string
-	MarketID       string
-	PriceMin       float64
-	PriceMax       float64
-	MeanPrice      float64
-	MedianPrice    float64
-	Variance       float64
-	StandardDev    float64
-	CoefficientVar float64
-	SampleSize     int
-	Confidence     ConfidenceLevel
-	PeriodStart    time.Time
-	PeriodEnd      time.Time
+	return models.ConfidenceMedium
 }
 
 // AggregatePrices aggregates a slice of price observations into a single result.
 // Returns nil if there are no observations.
-func AggregatePrices(observations []PriceObservation, cropID, marketID string, periodStart, periodEnd time.Time) *AggregatedPrice {
+func AggregatePrices(observations []models.PriceObservation, cropID, marketID, period, currency, unit string, periodStart, periodEnd time.Time) *models.AggregatedPrice {
 	if len(observations) == 0 {
 		return nil
 	}
@@ -178,8 +136,6 @@ func AggregatePrices(observations []PriceObservation, cropID, marketID string, p
 
 	// Calculate statistics
 	mean := CalculateMean(prices)
-	variance := CalculateVariance(prices)
-	stdDev := math.Sqrt(variance)
 	cv := CalculateCoefficientOfVariation(prices)
 	median := CalculateMedian(prices)
 	minPrice, maxPrice := findMinAndMax(prices)
@@ -187,19 +143,36 @@ func AggregatePrices(observations []PriceObservation, cropID, marketID string, p
 	// Determine confidence
 	confidence := DetermineConfidenceLevel(len(prices), cv)
 
-	return &AggregatedPrice{
-		CropID:         cropID,
-		MarketID:       marketID,
-		PriceMin:       minPrice,
-		PriceMax:       maxPrice,
-		MeanPrice:      mean,
-		MedianPrice:    median,
-		Variance:       variance,
-		StandardDev:    stdDev,
-		CoefficientVar: cv,
-		SampleSize:     len(prices),
-		Confidence:     confidence,
-		PeriodStart:    periodStart,
-		PeriodEnd:      periodEnd,
+	return &models.AggregatedPrice{
+		CropID:      cropID,
+		MarketID:    marketID,
+		Period:      period,
+		PeriodStart: periodStart,
+		PeriodEnd:   periodEnd,
+		PriceMin:    minPrice,
+		PriceMax:    maxPrice,
+		PriceMean:   mean,
+		PriceMedian: median,
+		Currency:    currency,
+		Unit:        unit,
+		Confidence:  confidence,
+		SampleSize:  len(prices),
 	}
+}
+
+// CalculateTrend compares current price to previous price.
+// Returns TrendUp if increase > threshold%, TrendDown if decrease > threshold%, else TrendStable.
+func CalculateTrend(currentPrice, previousPrice float64, thresholdPercent float64) models.Trend {
+	if previousPrice == 0 {
+		return models.TrendStable
+	}
+
+	changePercent := ((currentPrice - previousPrice) / previousPrice) * 100
+
+	if changePercent >= thresholdPercent {
+		return models.TrendUp
+	} else if changePercent <= -thresholdPercent {
+		return models.TrendDown
+	}
+	return models.TrendStable
 }

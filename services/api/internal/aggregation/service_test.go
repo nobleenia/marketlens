@@ -1,6 +1,7 @@
 package aggregation
 
 import (
+	"marketlens/internal/models"
 	"math"
 	"testing"
 	"time"
@@ -218,8 +219,8 @@ func TestDetermineConfidence_LowSampleSize(t *testing.T) {
 
 	got := DetermineConfidenceLevel(sampleSize, cv)
 
-	if got != ConfidenceLow {
-		t.Errorf("DetermineConfidenceLevel(%d, %v) = %v, want %v", sampleSize, cv, got, ConfidenceLow)
+	if got != models.ConfidenceLow {
+		t.Errorf("DetermineConfidenceLevel(%d, %v) = %v, want %v", sampleSize, cv, got, models.ConfidenceLow)
 	}
 }
 
@@ -229,8 +230,8 @@ func TestDetermineConfidence_ZeroSampleSize(t *testing.T) {
 
 	got := DetermineConfidenceLevel(sampleSize, cv)
 
-	if got != ConfidenceLow {
-		t.Errorf("DetermineConfidenceLevel(%d, %v) = %v, want %v", sampleSize, cv, got, ConfidenceLow)
+	if got != models.ConfidenceLow {
+		t.Errorf("DetermineConfidenceLevel(%d, %v) = %v, want %v", sampleSize, cv, got, models.ConfidenceLow)
 	}
 }
 
@@ -240,8 +241,8 @@ func TestDetermineConfidence_HighVariance(t *testing.T) {
 
 	got := DetermineConfidenceLevel(sampleSize, cv)
 
-	if got != ConfidenceLow {
-		t.Errorf("DetermineConfidenceLevel(%d, %v) = %v, want %v (high variance should be low confidence)", sampleSize, cv, got, ConfidenceLow)
+	if got != models.ConfidenceLow {
+		t.Errorf("DetermineConfidenceLevel(%d, %v) = %v, want %v (high variance should be low confidence)", sampleSize, cv, got, models.ConfidenceLow)
 	}
 }
 
@@ -251,8 +252,8 @@ func TestDetermineConfidence_MediumConfidence(t *testing.T) {
 
 	got := DetermineConfidenceLevel(sampleSize, cv)
 
-	if got != ConfidenceMedium {
-		t.Errorf("DetermineConfidenceLevel(%d, %v) = %v, want %v", sampleSize, cv, got, ConfidenceMedium)
+	if got != models.ConfidenceMedium {
+		t.Errorf("DetermineConfidenceLevel(%d, %v) = %v, want %v", sampleSize, cv, got, models.ConfidenceMedium)
 	}
 }
 
@@ -262,8 +263,8 @@ func TestDetermineConfidence_HighConfidence(t *testing.T) {
 
 	got := DetermineConfidenceLevel(sampleSize, cv)
 
-	if got != ConfidenceHigh {
-		t.Errorf("DetermineConfidenceLevel(%d, %v) = %v, want %v", sampleSize, cv, got, ConfidenceHigh)
+	if got != models.ConfidenceHigh {
+		t.Errorf("DetermineConfidenceLevel(%d, %v) = %v, want %v", sampleSize, cv, got, models.ConfidenceHigh)
 	}
 }
 
@@ -273,8 +274,8 @@ func TestDetermineConfidence_HighSampleLowVariance(t *testing.T) {
 
 	got := DetermineConfidenceLevel(sampleSize, cv)
 
-	if got != ConfidenceHigh {
-		t.Errorf("DetermineConfidenceLevel(%d, %v) = %v, want %v", sampleSize, cv, got, ConfidenceHigh)
+	if got != models.ConfidenceHigh {
+		t.Errorf("DetermineConfidenceLevel(%d, %v) = %v, want %v", sampleSize, cv, got, models.ConfidenceHigh)
 	}
 }
 
@@ -284,8 +285,8 @@ func TestDetermineConfidence_EdgeCaseMediumSampleMediumVariance(t *testing.T) {
 
 	got := DetermineConfidenceLevel(sampleSize, cv)
 
-	if got != ConfidenceMedium {
-		t.Errorf("DetermineConfidenceLevel(%d, %v) = %v, want %v", sampleSize, cv, got, ConfidenceMedium)
+	if got != models.ConfidenceMedium {
+		t.Errorf("DetermineConfidenceLevel(%d, %v) = %v, want %v", sampleSize, cv, got, models.ConfidenceMedium)
 	}
 }
 
@@ -294,11 +295,11 @@ func TestDetermineConfidence_EdgeCaseMediumSampleMediumVariance(t *testing.T) {
 // ===========================================
 
 func TestAggregatePrice_EmptyObservations(t *testing.T) {
-	observations := []PriceObservation{}
+	observations := []models.PriceObservation{}
 	periodStart := time.Now().Add(-24 * time.Hour)
 	periodEnd := time.Now()
 
-	got := AggregatePrices(observations, "", "", periodStart, periodEnd)
+	got := AggregatePrices(observations, "", "", "daily", "NGN", "kg", periodStart, periodEnd)
 
 	if got != nil {
 		t.Errorf("AggregatePrices with empty observations = %v, want nil", got)
@@ -308,7 +309,7 @@ func TestAggregatePrice_EmptyObservations(t *testing.T) {
 func TestAggregatePrice_SingleObservation(t *testing.T) {
 	cropID := "crop-123"
 	marketID := "market-456"
-	observations := []PriceObservation{
+	observations := []models.PriceObservation{
 		{
 			CropID:   cropID,
 			MarketID: marketID,
@@ -318,7 +319,7 @@ func TestAggregatePrice_SingleObservation(t *testing.T) {
 	periodStart := time.Now().Add(-24 * time.Hour)
 	periodEnd := time.Now()
 
-	got := AggregatePrices(observations, cropID, marketID, periodStart, periodEnd)
+	got := AggregatePrices(observations, cropID, marketID, "daily", "NGN", "kg", periodStart, periodEnd)
 
 	if got == nil {
 		t.Fatal("AggregatePrices with single observation returned nil")
@@ -336,24 +337,24 @@ func TestAggregatePrice_SingleObservation(t *testing.T) {
 	if got.PriceMax != 100.0 {
 		t.Errorf("PriceMax = %v, want 100.0", got.PriceMax)
 	}
-	if got.MeanPrice != 100.0 {
-		t.Errorf("MeanPrice = %v, want 100.0", got.MeanPrice)
+	if got.PriceMean != 100.0 {
+		t.Errorf("PriceMean = %v, want 100.0", got.PriceMean)
 	}
-	if got.MedianPrice != 100.0 {
-		t.Errorf("MedianPrice = %v, want 100.0", got.MedianPrice)
+	if got.PriceMedian != 100.0 {
+		t.Errorf("PriceMedian = %v, want 100.0", got.PriceMedian)
 	}
 	if got.SampleSize != 1 {
 		t.Errorf("SampleSize = %v, want 1", got.SampleSize)
 	}
-	if got.Confidence != ConfidenceLow {
-		t.Errorf("Confidence = %v, want %v (single observation)", got.Confidence, ConfidenceLow)
+	if got.Confidence != models.ConfidenceLow {
+		t.Errorf("Confidence = %v, want %v (single observation)", got.Confidence, models.ConfidenceLow)
 	}
 }
 
 func TestAggregatePrice_MultipleObservations(t *testing.T) {
 	cropID := "crop-123"
 	marketID := "market-456"
-	observations := []PriceObservation{
+	observations := []models.PriceObservation{
 		{CropID: cropID, MarketID: marketID, Price: 100.0},
 		{CropID: cropID, MarketID: marketID, Price: 120.0},
 		{CropID: cropID, MarketID: marketID, Price: 110.0},
@@ -363,7 +364,7 @@ func TestAggregatePrice_MultipleObservations(t *testing.T) {
 	periodStart := time.Now().Add(-24 * time.Hour)
 	periodEnd := time.Now()
 
-	got := AggregatePrices(observations, cropID, marketID, periodStart, periodEnd)
+	got := AggregatePrices(observations, cropID, marketID, "daily", "NGN", "kg", periodStart, periodEnd)
 
 	if got == nil {
 		t.Fatal("AggregatePrices with multiple observations returned nil")
@@ -375,28 +376,28 @@ func TestAggregatePrice_MultipleObservations(t *testing.T) {
 	if got.PriceMax != 120.0 {
 		t.Errorf("PriceMax = %v, want 120.0", got.PriceMax)
 	}
-	if got.MeanPrice != 110.0 {
-		t.Errorf("MeanPrice = %v, want 110.0", got.MeanPrice)
+	if got.PriceMean != 110.0 {
+		t.Errorf("PriceMean = %v, want 110.0", got.PriceMean)
 	}
-	if got.MedianPrice != 110.0 {
-		t.Errorf("MedianPrice = %v, want 110.0", got.MedianPrice)
+	if got.PriceMedian != 110.0 {
+		t.Errorf("PriceMedian = %v, want 110.0", got.PriceMedian)
 	}
 	if got.SampleSize != 5 {
 		t.Errorf("SampleSize = %v, want 5", got.SampleSize)
 	}
-	if got.Confidence == ConfidenceLow {
+	if got.Confidence == models.ConfidenceLow {
 		t.Errorf("Confidence = %v, expected medium or high for 5 samples with low variance", got.Confidence)
 	}
 }
 
 func TestAggregatePrice_SetsCorrectPeriod(t *testing.T) {
-	observations := []PriceObservation{
+	observations := []models.PriceObservation{
 		{CropID: "crop-1", MarketID: "market-1", Price: 100.0},
 	}
 	periodStart := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
 	periodEnd := time.Date(2026, 2, 2, 0, 0, 0, 0, time.UTC)
 
-	got := AggregatePrices(observations, "crop-1", "market-1", periodStart, periodEnd)
+	got := AggregatePrices(observations, "crop-1", "market-1", "daily", "NGN", "kg", periodStart, periodEnd)
 
 	if got == nil {
 		t.Fatal("AggregatePrices returned nil")
@@ -413,7 +414,7 @@ func TestAggregatePrice_SetsCorrectPeriod(t *testing.T) {
 func TestAggregatePrice_HighVarianceData(t *testing.T) {
 	cropID := "crop-123"
 	marketID := "market-456"
-	observations := []PriceObservation{
+	observations := []models.PriceObservation{
 		{CropID: cropID, MarketID: marketID, Price: 50.0},
 		{CropID: cropID, MarketID: marketID, Price: 150.0},
 		{CropID: cropID, MarketID: marketID, Price: 200.0},
@@ -421,13 +422,61 @@ func TestAggregatePrice_HighVarianceData(t *testing.T) {
 	periodStart := time.Now().Add(-24 * time.Hour)
 	periodEnd := time.Now()
 
-	got := AggregatePrices(observations, cropID, marketID, periodStart, periodEnd)
+	got := AggregatePrices(observations, cropID, marketID, "daily", "NGN", "kg", periodStart, periodEnd)
 
 	if got == nil {
 		t.Fatal("AggregatePrices returned nil")
 	}
 
-	if got.Confidence == ConfidenceHigh {
+	if got.Confidence == models.ConfidenceHigh {
 		t.Errorf("Confidence = %v, expected low or medium for high variance data", got.Confidence)
+	}
+}
+
+// ===========================================
+// Task 1.2.3: CalculateTrend
+// ===========================================
+
+func TestCalculateTrend_NoPreviousPrice(t *testing.T) {
+	got := CalculateTrend(100.0, 0, 5.0)
+
+	if got != models.TrendStable {
+		t.Errorf("CalculateTrend(100, 0, 5) = %v, want %v", got, models.TrendStable)
+	}
+}
+
+func TestCalculateTrend_PriceIncrease(t *testing.T) {
+	// 10% increase, threshold 5%
+	got := CalculateTrend(110.0, 100.0, 5.0)
+
+	if got != models.TrendUp {
+		t.Errorf("CalculateTrend(110, 100, 5) = %v, want %v", got, models.TrendUp)
+	}
+}
+
+func TestCalculateTrend_PriceDecrease(t *testing.T) {
+	// 10% decrease, threshold 5%
+	got := CalculateTrend(90.0, 100.0, 5.0)
+
+	if got != models.TrendDown {
+		t.Errorf("CalculateTrend(90, 100, 5) = %v, want %v", got, models.TrendDown)
+	}
+}
+
+func TestCalculateTrend_SmallChange(t *testing.T) {
+	// 2% increase, threshold 5%
+	got := CalculateTrend(102.0, 100.0, 5.0)
+
+	if got != models.TrendStable {
+		t.Errorf("CalculateTrend(102, 100, 5) = %v, want %v (small change)", got, models.TrendStable)
+	}
+}
+
+func TestCalculateTrend_ExactThreshold(t *testing.T) {
+	// Exactly 5% increase, threshold 5%
+	got := CalculateTrend(105.0, 100.0, 5.0)
+
+	if got != models.TrendUp {
+		t.Errorf("CalculateTrend(105, 100, 5) = %v, want %v (at threshold)", got, models.TrendUp)
 	}
 }

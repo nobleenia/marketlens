@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"marketlens/internal/models"
 	"os"
 	"testing"
 	"time"
@@ -91,7 +92,7 @@ func TestGetObservationsForAggregation_FiltersByCropAndMarket(t *testing.T) {
 		t.Skipf("Skipping: seed data not loaded (no Mile 12 market): %v", err)
 	}
 
-	testObs := PriceObservation{
+	testObs := models.PriceObservation{
 		CropID:          cropID,
 		MarketID:        marketID,
 		ObservedAt:      time.Now(),
@@ -154,7 +155,7 @@ func TestGetObservationsForAggregation_FiltersByTimeWindow(t *testing.T) {
 	now := time.Now()
 
 	// Insert old and recent observations
-	oldObs := PriceObservation{
+	oldObs := models.PriceObservation{
 		CropID:          cropID,
 		MarketID:        marketID,
 		ObservedAt:      now.Add(-48 * time.Hour),
@@ -168,7 +169,7 @@ func TestGetObservationsForAggregation_FiltersByTimeWindow(t *testing.T) {
 	}
 	_ = pg.InsertPriceObservation(ctx, oldObs)
 
-	recentObs := PriceObservation{
+	recentObs := models.PriceObservation{
 		CropID:          cropID,
 		MarketID:        marketID,
 		ObservedAt:      now.Add(-1 * time.Hour),
@@ -220,7 +221,7 @@ func TestGetObservationsForAggregation_ReturnsCorrectFields(t *testing.T) {
 
 	now := time.Now()
 
-	testObs := PriceObservation{
+	testObs := models.PriceObservation{
 		CropID:          cropID,
 		MarketID:        marketID,
 		ObservedAt:      now,
@@ -277,6 +278,85 @@ func TestGetObservationsForAggregation_ReturnsCorrectFields(t *testing.T) {
 
 	if !found {
 		t.Error("Test observation not found in results")
+	}
+}
+
+// ===========================================
+// GetLatestAggregatedPrice Tests
+// ===========================================
+
+func TestGetLatestAggregatedPrice_NoResults(t *testing.T) {
+	pg := getTestDB(t)
+	defer pg.Close()
+
+	ctx := context.Background()
+
+	agg, err := pg.GetLatestAggregatedPrice(
+		ctx,
+		"00000000-0000-0000-0000-000000000000",
+		"00000000-0000-0000-0000-000000000000",
+		"daily",
+	)
+
+	if err != nil {
+		t.Fatalf("GetLatestAggregatedPrice returned error: %v", err)
+	}
+
+	if agg != nil {
+		t.Errorf("Expected nil for non-existent data, got %v", agg)
+	}
+}
+
+func TestUpsertAggregatedPrice_Insert(t *testing.T) {
+	pg := getTestDB(t)
+	defer pg.Close()
+
+	ctx := context.Background()
+
+	cropID, err := pg.LookupCropID(ctx, "Tomato")
+	if err != nil {
+		t.Skipf("Skipping: seed data not loaded: %v", err)
+	}
+
+	marketID, err := pg.LookupMarketID(ctx, "Mile 12", "Lagos")
+	if err != nil {
+		t.Skipf("Skipping: seed data not loaded: %v", err)
+	}
+
+	now := time.Now()
+	agg := models.AggregatedPrice{
+		CropID:      cropID,
+		MarketID:    marketID,
+		Period:      "daily",
+		PeriodStart: now.Truncate(24 * time.Hour),
+		PeriodEnd:   now.Truncate(24 * time.Hour).Add(24 * time.Hour),
+		PriceMin:    14000.0,
+		PriceMax:    18000.0,
+		PriceMean:   16000.0,
+		PriceMedian: 16500.0,
+		Currency:    "NGN",
+		Unit:        "basket",
+		Confidence:  models.ConfidenceMedium,
+		SampleSize:  5,
+	}
+
+	err = pg.UpsertAggregatedPrice(ctx, agg)
+	if err != nil {
+		t.Fatalf("UpsertAggregatedPrice failed: %v", err)
+	}
+
+	// Verify it was inserted
+	retrieved, err := pg.GetLatestAggregatedPrice(ctx, cropID, marketID, "daily")
+	if err != nil {
+		t.Fatalf("GetLatestAggregatedPrice failed: %v", err)
+	}
+
+	if retrieved == nil {
+		t.Fatal("Expected to retrieve aggregated price, got nil")
+	}
+
+	if retrieved.PriceMean != 16000.0 {
+		t.Errorf("PriceMean = %v, want 16000.0", retrieved.PriceMean)
 	}
 }
 
@@ -377,7 +457,7 @@ func TestInsertPriceObservation_ValidData(t *testing.T) {
 		t.Skipf("Skipping: seed data not loaded: %v", err)
 	}
 
-	obs := PriceObservation{
+	obs := models.PriceObservation{
 		CropID:          cropID,
 		MarketID:        marketID,
 		ObservedAt:      time.Now(),
