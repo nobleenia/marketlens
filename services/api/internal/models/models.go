@@ -36,7 +36,9 @@ type PriceObservation struct {
 type AggregatedPrice struct {
 	ID          string
 	CropID      string
+	CropName    string
 	MarketID    string
+	MarketName  string
 	Period      string // "daily", "weekly", "monthly"
 	PeriodStart time.Time
 	PeriodEnd   time.Time
