@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"marketlens/internal/models"
 	"marketlens/internal/store"
 )
 
@@ -124,7 +125,7 @@ func (ing *Ingestor) upsertObservation(ctx context.Context, rec *Record) (bool, 
 		return false, fmt.Errorf("lookup market ID: %w", err)
 	}
 
-	err = ing.pg.InsertPriceObservation(ctx, store.PriceObservation{
+	err = ing.pg.InsertPriceObservation(ctx, models.PriceObservation{
 		CropID:          cropID,
 		MarketID:        marketID,
 		ObservedAt:      rec.ObservedAt,

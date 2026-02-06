@@ -1,105 +1,13 @@
 package aggregation
 
 import (
+	"context"
+	"fmt"
+	"log"
 	"marketlens/internal/models"
-	"math"
-	"sort"
+	"marketlens/internal/store"
 	"time"
 )
-
-// CalculateMean calculates the arithmetic mean of a slice of prices.
-func CalculateMean(prices []float64) float64 {
-	n := len(prices)
-	if n == 0 {
-		return 0
-	}
-
-	var sum float64
-	for _, price := range prices {
-		sum += price
-	}
-	return sum / float64(n)
-}
-
-// CalculateMedian calculates the median of a slice of prices.
-// It does NOT mutate the input slice.
-func CalculateMedian(prices []float64) float64 {
-	n := len(prices)
-	if n == 0 {
-		return 0
-	}
-
-	// Create a copy to avoid mutating the input
-	sorted := make([]float64, n)
-	copy(sorted, prices)
-	sort.Float64s(sorted)
-
-	if n%2 == 1 {
-		return sorted[n/2]
-	}
-	return (sorted[n/2-1] + sorted[n/2]) / 2
-}
-
-// CalculateVariance calculates the population variance of a slice of prices.
-// Variance = Σ(x - mean)² / n
-func CalculateVariance(prices []float64) float64 {
-	n := len(prices)
-	if n <= 1 {
-		return 0
-	}
-
-	mean := CalculateMean(prices)
-
-	var sumSquares float64
-	for _, price := range prices {
-		diff := price - mean
-		sumSquares += diff * diff
-	}
-	return sumSquares / float64(n)
-}
-
-// CalculateStandardDeviation calculates the standard deviation (sqrt of variance).
-func CalculateStandardDeviation(prices []float64) float64 {
-	variance := CalculateVariance(prices)
-	return math.Sqrt(variance)
-}
-
-// CalculateCoefficientOfVariation calculates CV as a percentage.
-// CV = (stdDev / mean) * 100
-func CalculateCoefficientOfVariation(prices []float64) float64 {
-	n := len(prices)
-	if n == 0 {
-		return 0
-	}
-
-	mean := CalculateMean(prices)
-	if mean == 0 {
-		return 0
-	}
-
-	stdDev := CalculateStandardDeviation(prices)
-	return (stdDev / mean) * 100
-}
-
-// findMinAndMax returns the minimum and maximum values in a slice.
-func findMinAndMax(prices []float64) (min float64, max float64) {
-	if len(prices) == 0 {
-		return 0, 0
-	}
-
-	min = prices[0]
-	max = prices[0]
-
-	for _, price := range prices {
-		if price < min {
-			min = price
-		}
-		if price > max {
-			max = price
-		}
-	}
-	return min, max
-}
 
 // Confidence thresholds (as percentages)
 const (
@@ -175,4 +83,65 @@ func CalculateTrend(currentPrice, previousPrice float64, thresholdPercent float6
 		return models.TrendDown
 	}
 	return models.TrendStable
+}
+
+type Service struct {
+	store *store.Postgres
+}
+
+func NewService(store *store.Postgres) *Service {
+	return &Service{
+		store: store,
+	}
+}
+
+func (s *Service) RunDailyAggregation(ctx context.Context) error {
+	periodStart := time.Now().Add(-24 * time.Hour)
+	periodEnd := time.Now()
+
+	// 1. Get all unique crop-market combinations that have observations in the last day
+	cropMarkets, err := s.store.GetCropMarketCombinations(ctx, periodStart, periodEnd)
+	if err != nil {
+		return fmt.Errorf("failed to get crop-market combinations: %w", err)
+	}
+
+	for _, cm := range cropMarkets {
+		// 2. For each combination, get observations for the last day
+		observations, err := s.store.GetObservationsForAggregation(ctx, cm.CropID, cm.MarketID, periodStart, periodEnd)
+		if err != nil {
+			log.Printf("failed to get observations for crop %s and market %s: %v", cm.CropID, cm.MarketID, err)
+			continue
+		}
+
+		if len(observations) == 0 {
+			continue // no observations to aggregate
+		}
+
+		// 3. Aggregate the prices
+		agg := AggregatePrices(observations, cm.CropID, cm.MarketID, "daily", observations[0].Currency, observations[0].Unit, periodStart, periodEnd)
+		if agg == nil {
+			continue // no valid aggregation
+		}
+
+		// 4. Get the latest aggregated price for trend calculation
+		prevAgg, err := s.store.GetLatestAggregatedPrice(ctx, cm.CropID, cm.MarketID, "daily")
+		if err != nil {
+			return fmt.Errorf("failed to get latest aggregated price for crop %s and market %s: %w", cm.CropID, cm.MarketID, err)
+		}
+
+		// 5. Calculate trend if previous aggregation exists
+		if prevAgg != nil {
+			agg.Trend = CalculateTrend(agg.PriceMean, prevAgg.PriceMean, 5.0) // using 5% threshold for trend
+		} else {
+			agg.Trend = models.TrendStable
+		}
+
+		// 6. Upsert the aggregated price into the database
+		err = s.store.UpsertAggregatedPrice(ctx, *agg)
+		if err != nil {
+			return fmt.Errorf("failed to upsert aggregated price for crop %s and market %s: %w", cm.CropID, cm.MarketID, err)
+		}
+	}
+
+	return nil
 }

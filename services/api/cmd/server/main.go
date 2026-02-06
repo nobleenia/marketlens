@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"marketlens/internal/aggregation"
 	"marketlens/internal/cache"
 	"marketlens/internal/config"
 	"marketlens/internal/httpserver"
@@ -25,15 +26,22 @@ func main() {
 	}
 	defer db.Close()
 
+	// Initialize Redis cache (optional, can be used for caching aggregated results or other data)
 	rdb, err := cache.NewRedisClient(context.Background(), cfg)
 	if err != nil {
-		log.Fatalf("failed to initialize redis: %v", err)
+		log.Printf("failed to initialize redis: %v", err)
+		rdb = nil // proceed without Redis
+	} else {
+		defer func() {
+			_ = rdb.Close()
+		}()
 	}
-	defer func() {
-		_ = rdb.Close()
-	}()
 
+	// initialize and run server
 	srv := httpserver.New(cfg)
+
+	// Start background aggregation job
+	go runScheduledAggregation(db)
 
 	// graceful shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -57,4 +65,29 @@ func main() {
 		log.Fatalf("shutdown error: %v", err)
 	}
 	log.Println("server stopped")
+}
+
+func runScheduledAggregation(db *store.Postgres) {
+	svc := aggregation.NewService(db)
+
+	// Run immediately on startup
+	log.Println("Running initial aggregation...")
+	if err := svc.RunDailyAggregation(context.Background()); err != nil {
+		log.Printf("initial aggregation error: %v", err)
+	} else {
+		log.Println("Initial aggregation completed successfully")
+	}
+
+	// Schedule to run every 1 hour (can be adjusted as needed)
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		log.Println("Running scheduled aggregation...")
+		if err := svc.RunDailyAggregation(context.Background()); err != nil {
+			log.Printf("scheduled aggregation error: %v", err)
+		} else {
+			log.Println("Scheduled aggregation completed successfully")
+		}
+	}
 }

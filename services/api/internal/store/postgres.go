@@ -86,12 +86,12 @@ func (pg *Postgres) LookupMarketID(ctx context.Context, marketName, state string
 	return marketID, nil
 }
 
-func (pg *Postgres) GetObservationsForAggregation(ctx context.Context, cropID, marketID string, from time.Time, to time.Time) ([]models.PriceObservation, error) {
+func (pg *Postgres) GetObservationsForAggregation(ctx context.Context, cropID, marketID string, periodStart, periodEnd time.Time) ([]models.PriceObservation, error) {
 	rows, err := pg.pool.Query(ctx, `
 		SELECT crop_id, market_id, observed_at, price, currency, unit, source, reporter_id, notes, confidence_score
 		FROM price_observations
 		WHERE crop_id = $1 AND market_id = $2 AND observed_at >= $3 AND observed_at <= $4
-	`, cropID, marketID, from, to)
+	`, cropID, marketID, periodStart, periodEnd)
 	if err != nil {
 		return nil, fmt.Errorf("GetObservationsForAggregation: %w", err)
 	}
@@ -120,7 +120,7 @@ func (pg *Postgres) GetLatestAggregatedPrice(ctx context.Context, cropID, market
 
 	err := pg.pool.QueryRow(ctx, `
 		SELECT id, crop_id, market_id, period, period_start, period_end,
-		       price_min, price_max, price_mean, price_median,
+		       price_min, price_max, price_avg, price_median,
 		       currency, unit, confidence_score, sample_size,
 		       created_at, updated_at
 		FROM aggregated_prices
@@ -150,14 +150,14 @@ func (pg *Postgres) UpsertAggregatedPrice(ctx context.Context, agg models.Aggreg
 	_, err := pg.pool.Exec(ctx, `
 		INSERT INTO aggregated_prices (
 			crop_id, market_id, period, period_start, period_end,
-		    price_min, price_max, price_mean, price_median,
+		    price_min, price_max, price_avg, price_median,
 		    currency, unit, confidence_score, sample_size, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
 		ON CONFLICT (crop_id, market_id, period, period_start, period_end)
 		DO UPDATE SET 
 			price_min = EXCLUDED.price_min,
 		    price_max = EXCLUDED.price_max,
-		    price_mean = EXCLUDED.price_mean,
+		    price_avg = EXCLUDED.price_avg,
 		    price_median = EXCLUDED.price_median,
 		    currency = EXCLUDED.currency,
 		    unit = EXCLUDED.unit,
@@ -172,4 +172,78 @@ func (pg *Postgres) UpsertAggregatedPrice(ctx context.Context, agg models.Aggreg
 		return fmt.Errorf("UpsertAggregatedPrice: %w", err)
 	}
 	return nil
+}
+
+func (pg *Postgres) GetAllMarkets(ctx context.Context) ([]models.Market, error) {
+	rows, err := pg.pool.Query(ctx, `
+		SELECT id, name, state, country FROM markets
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("GetAllMarkets: %w", err)
+	}
+	defer rows.Close()
+
+	var markets []models.Market
+	for rows.Next() {
+		var m models.Market
+		if err := rows.Scan(&m.ID, &m.Name, &m.State, &m.Country); err != nil {
+			return nil, fmt.Errorf("GetAllMarkets scan: %w", err)
+		}
+		markets = append(markets, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("GetAllMarkets rows: %w", err)
+	}
+
+	return markets, nil
+}
+
+func (pg *Postgres) GetAllCrops(ctx context.Context) ([]models.Crop, error) {
+	rows, err := pg.pool.Query(ctx, `
+		SELECT id, name, unit FROM crops
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("GetAllCrops: %w", err)
+	}
+	defer rows.Close()
+
+	var crops []models.Crop
+	for rows.Next() {
+		var c models.Crop
+		if err := rows.Scan(&c.ID, &c.Name, &c.Unit); err != nil {
+			return nil, fmt.Errorf("GetAllCrops scan: %w", err)
+		}
+		crops = append(crops, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("GetAllCrops rows: %w", err)
+	}
+
+	return crops, nil
+}
+
+func (pg *Postgres) GetCropMarketCombinations(ctx context.Context, from time.Time, to time.Time) ([]models.CropMarketCombination, error) {
+	rows, err := pg.pool.Query(ctx, `
+		SELECT DISTINCT crop_id, market_id
+		FROM price_observations
+		WHERE observed_at >= $1 AND observed_at <= $2
+	`, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("GetCropMarketCombinations: %w", err)
+	}
+	defer rows.Close()
+
+	var combinations []models.CropMarketCombination
+	for rows.Next() {
+		var cm models.CropMarketCombination
+		if err := rows.Scan(&cm.CropID, &cm.MarketID); err != nil {
+			return nil, fmt.Errorf("GetCropMarketCombinations scan: %w", err)
+		}
+		combinations = append(combinations, cm)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("GetCropMarketCombinations rows: %w", err)
+	}
+
+	return combinations, nil
 }
