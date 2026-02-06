@@ -38,7 +38,7 @@ func main() {
 	}
 
 	// initialize and run server
-	srv := httpserver.New(cfg)
+	srv := httpserver.New(cfg, db)
 
 	// Start background aggregation job
 	go runScheduledAggregation(db)

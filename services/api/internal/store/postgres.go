@@ -247,3 +247,123 @@ func (pg *Postgres) GetCropMarketCombinations(ctx context.Context, from time.Tim
 
 	return combinations, nil
 }
+
+// LookupMarketIDByName finds a market by name alone (case-insensitive).
+// Use this when state is not available (e.g., URL path).
+func (pg *Postgres) LookupMarketIDByName(ctx context.Context, marketName string) (string, error) {
+	var marketID string
+	err := pg.pool.QueryRow(ctx, `
+        SELECT id FROM markets
+        WHERE LOWER(name) = LOWER($1)
+        LIMIT 1
+    `, marketName).Scan(&marketID)
+	if err != nil {
+		return "", fmt.Errorf("LookupMarketIDByName: %w", err)
+	}
+	return marketID, nil
+}
+
+// GetAggregatedPrices returns aggregated prices with optional filters.
+// Pass empty strings / zero time to omit a filter.
+func (pg *Postgres) GetAggregatedPrices(ctx context.Context, cropName, marketName string, from, to time.Time) ([]models.AggregatedPrice, error) {
+	query := `
+        SELECT ap.id, ap.crop_id, c.name, ap.market_id, m.name,
+               ap.period, ap.period_start, ap.period_end,
+               ap.price_min, ap.price_max, ap.price_avg, ap.price_median,
+               ap.currency, ap.unit, ap.confidence_score, ap.sample_size,
+               ap.created_at, ap.updated_at
+        FROM aggregated_prices ap
+        JOIN crops c ON c.id = ap.crop_id
+        JOIN markets m ON m.id = ap.market_id
+        WHERE 1=1
+    `
+	args := []interface{}{}
+	argIdx := 1
+
+	if cropName != "" {
+		query += fmt.Sprintf(" AND LOWER(c.name) = LOWER($%d)", argIdx)
+		args = append(args, cropName)
+		argIdx++
+	}
+	if marketName != "" {
+		query += fmt.Sprintf(" AND LOWER(m.name) = LOWER($%d)", argIdx)
+		args = append(args, marketName)
+		argIdx++
+	}
+	if !from.IsZero() {
+		query += fmt.Sprintf(" AND ap.period_start >= $%d", argIdx)
+		args = append(args, from)
+		argIdx++
+	}
+	if !to.IsZero() {
+		query += fmt.Sprintf(" AND ap.period_end <= $%d", argIdx)
+		args = append(args, to)
+		argIdx++
+	}
+
+	query += " ORDER BY ap.period_end DESC"
+
+	rows, err := pg.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("GetAggregatedPrices: %w", err)
+	}
+	defer rows.Close()
+
+	var results []models.AggregatedPrice
+	for rows.Next() {
+		var agg models.AggregatedPrice
+		var confidenceScore float64
+
+		if err := rows.Scan(
+			&agg.ID, &agg.CropID, &agg.CropName, &agg.MarketID, &agg.MarketName,
+			&agg.Period, &agg.PeriodStart, &agg.PeriodEnd,
+			&agg.PriceMin, &agg.PriceMax, &agg.PriceMean, &agg.PriceMedian,
+			&agg.Currency, &agg.Unit, &confidenceScore,
+			&agg.SampleSize, &agg.CreatedAt, &agg.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("GetAggregatedPrices scan: %w", err)
+		}
+		agg.Confidence = models.ScoreToConfidenceLevel(confidenceScore)
+		results = append(results, agg)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("GetAggregatedPrices rows: %w", err)
+	}
+
+	return results, nil
+}
+
+// GetAggregatedPriceByCropAndMarket returns the single latest aggregated price
+// for a crop+market pair (looked up by name, case-insensitive).
+func (pg *Postgres) GetAggregatedPriceByCropAndMarket(ctx context.Context, cropName, marketName string) (*models.AggregatedPrice, error) {
+	var agg models.AggregatedPrice
+	var confidenceScore float64
+
+	err := pg.pool.QueryRow(ctx, `
+        SELECT ap.id, ap.crop_id, c.name, ap.market_id, m.name,
+               ap.period, ap.period_start, ap.period_end,
+               ap.price_min, ap.price_max, ap.price_avg, ap.price_median,
+               ap.currency, ap.unit, ap.confidence_score, ap.sample_size,
+               ap.created_at, ap.updated_at
+        FROM aggregated_prices ap
+        JOIN crops c ON c.id = ap.crop_id
+        JOIN markets m ON m.id = ap.market_id
+        WHERE LOWER(c.name) = LOWER($1) AND LOWER(m.name) = LOWER($2)
+        ORDER BY ap.period_end DESC
+        LIMIT 1
+    `, cropName, marketName).Scan(
+		&agg.ID, &agg.CropID, &agg.CropName, &agg.MarketID, &agg.MarketName,
+		&agg.Period, &agg.PeriodStart, &agg.PeriodEnd,
+		&agg.PriceMin, &agg.PriceMax, &agg.PriceMean, &agg.PriceMedian,
+		&agg.Currency, &agg.Unit, &confidenceScore,
+		&agg.SampleSize, &agg.CreatedAt, &agg.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("GetAggregatedPriceByCropAndMarket: %w", err)
+	}
+	agg.Confidence = models.ScoreToConfidenceLevel(confidenceScore)
+	return &agg, nil
+}
