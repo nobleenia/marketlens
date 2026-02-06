@@ -75,3 +75,21 @@ func ScoreToConfidenceLevel(score float64) ConfidenceLevel {
 		return ConfidenceLow
 	}
 }
+
+type Market struct {
+	ID      string
+	Name    string
+	State   string
+	Country string
+}
+
+type Crop struct {
+	ID   string
+	Name string
+	Unit string
+}
+
+type CropMarketCombination struct {
+	CropID   string
+	MarketID string
+}
