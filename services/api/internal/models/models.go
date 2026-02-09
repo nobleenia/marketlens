@@ -35,25 +35,25 @@ type PriceObservation struct {
 }
 
 type AggregatedPrice struct {
-	ID          string
-	CropID      string
-	CropName    string
-	MarketID    string
-	MarketName  string
-	Period      string // "daily", "weekly", "monthly"
-	PeriodStart time.Time
-	PeriodEnd   time.Time
-	PriceMin    float64
-	PriceMax    float64
-	PriceMean   float64
-	PriceMedian float64
-	Currency    string
-	Unit        string
-	Confidence  ConfidenceLevel
-	SampleSize  int
-	Trend       Trend
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID          string          `json:"id"`
+	CropID      string          `json:"crop_id"`
+	CropName    string          `json:"crop_name"`
+	MarketID    string          `json:"market_id"`
+	MarketName  string          `json:"market_name"`
+	Period      string          `json:"period"` // "daily", "weekly", "monthly"
+	PeriodStart time.Time       `json:"period_start"`
+	PeriodEnd   time.Time       `json:"period_end"`
+	PriceMin    float64         `json:"price_min"`
+	PriceMax    float64         `json:"price_max"`
+	PriceMean   float64         `json:"price_mean"`
+	PriceMedian float64         `json:"price_median"`
+	Currency    string          `json:"currency"`
+	Unit        string          `json:"unit"`
+	Confidence  ConfidenceLevel `json:"confidence"`
+	SampleSize  int             `json:"sample_size"`
+	Trend       Trend           `json:"trend"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
 func (c ConfidenceLevel) ToScore() float64 {
@@ -80,16 +80,18 @@ func ScoreToConfidenceLevel(score float64) ConfidenceLevel {
 }
 
 type Market struct {
-	ID      string
-	Name    string
-	State   string
-	Country string
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	State     string  `json:"state"`
+	Country   string  `json:"country"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
 }
 
 type Crop struct {
-	ID   string
-	Name string
-	Unit string
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Unit string `json:"unit"`
 }
 
 type CropMarketCombination struct {

@@ -176,7 +176,7 @@ func (pg *Postgres) UpsertAggregatedPrice(ctx context.Context, agg models.Aggreg
 
 func (pg *Postgres) GetAllMarkets(ctx context.Context) ([]models.Market, error) {
 	rows, err := pg.pool.Query(ctx, `
-		SELECT id, name, state, country FROM markets
+		SELECT id, name, state, country, COALESCE(latitude, 0), COALESCE(longitude, 0) FROM markets
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("GetAllMarkets: %w", err)
@@ -186,7 +186,7 @@ func (pg *Postgres) GetAllMarkets(ctx context.Context) ([]models.Market, error) 
 	var markets []models.Market
 	for rows.Next() {
 		var m models.Market
-		if err := rows.Scan(&m.ID, &m.Name, &m.State, &m.Country); err != nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.State, &m.Country, &m.Latitude, &m.Longitude); err != nil {
 			return nil, fmt.Errorf("GetAllMarkets scan: %w", err)
 		}
 		markets = append(markets, m)
@@ -366,4 +366,19 @@ func (pg *Postgres) GetAggregatedPriceByCropAndMarket(ctx context.Context, cropN
 	}
 	agg.Confidence = models.ScoreToConfidenceLevel(confidenceScore)
 	return &agg, nil
+}
+
+// InsertCrop creates a new crop and returns its ID.
+func (pg *Postgres) InsertCrop(ctx context.Context, name, unit string) (string, error) {
+	var id string
+	err := pg.pool.QueryRow(ctx, `
+        INSERT INTO crops (name, unit)
+        VALUES ($1, $2)
+        ON CONFLICT (name) DO UPDATE SET unit = EXCLUDED.unit
+        RETURNING id
+    `, name, unit).Scan(&id)
+	if err != nil {
+		return "", fmt.Errorf("InsertCrop: %w", err)
+	}
+	return id, nil
 }

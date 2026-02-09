@@ -13,7 +13,9 @@ import (
 
 func main() {
 	var file string
+	var mode string
 	flag.StringVar(&file, "file", "", "Path to CSV file to ingest")
+	flag.StringVar(&mode, "mode", "standard", "Ingestion mode: standard or wfp")
 	flag.Parse()
 
 	if file == "" {
@@ -35,9 +37,17 @@ func main() {
 	}
 	defer f.Close()
 
-	ingestor := ingestion.NewIngestor(pg, log.Default())
+	var inserted, skipped int
 
-	inserted, skipped, err := ingestor.IngestCSV(ctx, f)
+	switch mode {
+	case "wfp":
+		wfpIngestor := ingestion.NewWFPIngestor(pg, log.Default())
+		inserted, skipped, err = wfpIngestor.IngestWFPCSV(ctx, f)
+	default:
+		ingestor := ingestion.NewIngestor(pg, log.Default())
+		inserted, skipped, err = ingestor.IngestCSV(ctx, f)
+	}
+
 	if err != nil {
 		log.Fatalf("failed to ingest CSV: %v", err)
 	}

@@ -194,7 +194,7 @@ func (s *Server) handlePostObservation(w http.ResponseWriter, r *http.Request) {
 		}
 		id, err := s.db.LookupCropID(ctx, req.CropName)
 		if err != nil {
-			http.Error(w, "Unkown crop", http.StatusBadRequest)
+			http.Error(w, "Unknown crop", http.StatusBadRequest)
 			return
 		}
 		cropID = id
@@ -209,7 +209,7 @@ func (s *Server) handlePostObservation(w http.ResponseWriter, r *http.Request) {
 		}
 		id, err := s.db.LookupMarketIDByName(ctx, req.MarketName)
 		if err != nil {
-			http.Error(w, "UNknown market", http.StatusBadRequest)
+			http.Error(w, "Unknown market", http.StatusBadRequest)
 			return
 		}
 		marketID = id
