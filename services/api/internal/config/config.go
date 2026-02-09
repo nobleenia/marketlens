@@ -28,6 +28,11 @@ type Config struct {
 
 	RedisHost string
 	RedisPort string
+
+	AfricaTalkingUser   string
+	AfricaTalkingAPIKey string
+
+	USSDWebHookSecret string
 }
 
 func FromEnv() Config {
@@ -43,6 +48,11 @@ func FromEnv() Config {
 
 		RedisHost: getEnv("REDIS_HOST", "redis"),
 		RedisPort: getEnv("REDIS_PORT", "6379"),
+
+		AfricaTalkingUser:   getEnv("AT_USER", "marketlens"),
+		AfricaTalkingAPIKey: getEnv("AT_API", "africatalking_api_key"),
+
+		USSDWebHookSecret: getEnv("USSD_WEBHOOK_SECRET", ""),
 	}
 }
 
