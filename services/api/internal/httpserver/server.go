@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"marketlens/internal/config"
+	"marketlens/internal/models"
 	"marketlens/internal/store"
 )
 
@@ -47,6 +48,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/v1/markets", s.handleGetMarkets)
 	s.mux.HandleFunc("/v1/prices", s.handleGetPrices)     // list + filters via query params
 	s.mux.HandleFunc("/v1/prices/", s.handleGetPricePath) // /v1/prices/{crop}/{market}
+	s.mux.HandleFunc("/v1/observations", s.handlePostObservation)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -135,6 +137,122 @@ func (s *Server) handleGetPricePath(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, price)
+}
+
+func (s *Server) handlePostObservation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		CropID     string  `json:"crop_id"`
+		CropName   string  `json:"crop_name"`
+		MarketID   string  `json:"market_id"`
+		MarketName string  `json:"market_name"`
+		ObservedAt string  `json:"observed_at"` // RFC3339 or YYYY-MM-DD
+		Price      float64 `json:"price"`
+		Currency   string  `json:"currency"`
+		Unit       string  `json:"unit"`
+		PriceType  string  `json:"price_type"`
+		Source     string  `json:"source"`
+		ReporterID string  `json:"reporter_id"`
+		Notes      string  `json:"notes"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid json", http.StatusBadRequest)
+		return
+	}
+
+	// Basic Validation
+	if req.Price <= 0 {
+		http.Error(w, "Price must be > 0", http.StatusBadRequest)
+		return
+	}
+	if req.Currency == "" {
+		req.Currency = "NGN"
+	}
+	if req.Unit == "" {
+		req.Unit = "kg"
+	}
+	if req.Source == "" {
+		req.Source = "api"
+	}
+	if req.PriceType == "" {
+		req.PriceType = "unknown"
+	}
+
+	ctx := r.Context()
+
+	// Resolve CropID
+	cropID := req.CropID
+	if cropID == "" {
+		if req.CropName == "" {
+			http.Error(w, "crop_id or crop_name required", http.StatusBadRequest)
+			return
+		}
+		id, err := s.db.LookupCropID(ctx, req.CropName)
+		if err != nil {
+			http.Error(w, "Unkown crop", http.StatusBadRequest)
+			return
+		}
+		cropID = id
+	}
+
+	// Resolve market ID (try LookupMarketIDByName if state not supplied)
+	marketID := req.MarketID
+	if marketID == "" {
+		if req.MarketName == "" {
+			http.Error(w, "market_id or market_name required", http.StatusBadRequest)
+			return
+		}
+		id, err := s.db.LookupMarketIDByName(ctx, req.MarketName)
+		if err != nil {
+			http.Error(w, "UNknown market", http.StatusBadRequest)
+			return
+		}
+		marketID = id
+	}
+
+	// Parse observed_at
+	var observedAt time.Time
+	var err error
+	if req.ObservedAt != "" {
+		observedAt, err = time.Parse(time.RFC3339, req.ObservedAt)
+		if err != nil {
+			observedAt, err = time.Parse("2006-01-02", req.ObservedAt)
+			if err != nil {
+				http.Error(w, "Invalid observed_at (use RFC3339 or YYYY-MM-DD)", http.StatusBadRequest)
+				return
+			}
+		}
+	} else {
+		observedAt = time.Now().UTC()
+	}
+
+	obs := models.PriceObservation{
+		CropID:          cropID,
+		MarketID:        marketID,
+		ObservedAt:      observedAt,
+		Price:           req.Price,
+		Currency:        req.Currency,
+		Unit:            req.Unit,
+		PriceType:       req.PriceType,
+		Source:          req.Source,
+		ReporterID:      req.ReporterID,
+		Notes:           req.Notes,
+		ConfidenceScore: 0.50,
+	}
+
+	if err := s.db.InsertPriceObservation(ctx, obs); err != nil {
+		log.Printf("InsertPriceObservation error: %v", err)
+		http.Error(w, "Failed to insert observation", http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	writeJSON(w, map[string]string{"status": "created"})
 }
 
 // writeJSON is a small helper to avoid repeating Content-Type + Encode.

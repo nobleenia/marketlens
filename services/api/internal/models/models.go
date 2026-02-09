@@ -19,18 +19,19 @@ const (
 )
 
 type PriceObservation struct {
-	ID              string
-	CropID          string
-	MarketID        string
-	ObservedAt      time.Time
-	Price           float64
-	Currency        string
-	Unit            string
-	Source          string
-	ReporterID      string
-	Notes           string
-	ConfidenceScore float64
-	CreatedAt       time.Time
+	ID              string    `json:"id"`
+	CropID          string    `json:"crop_id"`
+	MarketID        string    `json:"market_id"`
+	ObservedAt      time.Time `json:"observed_at"`
+	Price           float64   `json:"price"`
+	Currency        string    `json:"currency"`
+	Unit            string    `json:"unit"`
+	PriceType       string    `json:"price_type"`
+	Source          string    `json:"source"`
+	ReporterID      string    `json:"reporter_id"`
+	Notes           string    `json:"notes"`
+	ConfidenceScore float64   `json:"confidence_score"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 type AggregatedPrice struct {
