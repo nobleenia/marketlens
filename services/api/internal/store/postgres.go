@@ -52,10 +52,10 @@ func (pg *Postgres) Close() {
 func (pg *Postgres) InsertPriceObservation(ctx context.Context, obs models.PriceObservation) error {
 	_, err := pg.pool.Exec(ctx, `
 		INSERT INTO price_observations
-		(crop_id, market_id, observed_at, price, currency, unit, source, reporter_id, notes, confidence_score)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		(crop_id, market_id, observed_at, price, currency, unit, price_type, source, reporter_id, notes, confidence_score)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`, obs.CropID, obs.MarketID, obs.ObservedAt, obs.Price, obs.Currency, obs.Unit,
-		obs.Source, obs.ReporterID, obs.Notes, obs.ConfidenceScore)
+		obs.PriceType, obs.Source, obs.ReporterID, obs.Notes, obs.ConfidenceScore)
 	if err != nil {
 		return fmt.Errorf("InsertPriceObservation: %w", err)
 	}
