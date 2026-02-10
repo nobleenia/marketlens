@@ -95,18 +95,24 @@ func NewService(store *store.Postgres) *Service {
 	}
 }
 
-func (s *Service) RunDailyAggregation(ctx context.Context) error {
-	periodStart := time.Now().Add(-24 * time.Hour)
+// RunDailyAggregation aggregates prices within the given lookback window.
+// Use a large lookback (e.g., 365 days) on startup to catch historical data,
+// and a short one (e.g., 1 day) for the hourly schedule.
+func (s *Service) RunDailyAggregation(ctx context.Context, lookback time.Duration) error {
 	periodEnd := time.Now()
+	periodStart := periodEnd.Add(-lookback)
 
-	// 1. Get all unique crop-market combinations that have observations in the last day
+	// 1. Get all unique crop-market combinations that have observations in the window
 	cropMarkets, err := s.store.GetCropMarketCombinations(ctx, periodStart, periodEnd)
 	if err != nil {
 		return fmt.Errorf("failed to get crop-market combinations: %w", err)
 	}
 
+	log.Printf("Aggregation: found %d crop-market combinations (window: %s to %s)",
+		len(cropMarkets), periodStart.Format("2006-01-02"), periodEnd.Format("2006-01-02"))
+
 	for _, cm := range cropMarkets {
-		// 2. For each combination, get observations for the last day
+		// 2. For each combination, get observations in the window
 		observations, err := s.store.GetObservationsForAggregation(ctx, cm.CropID, cm.MarketID, periodStart, periodEnd)
 		if err != nil {
 			log.Printf("failed to get observations for crop %s and market %s: %v", cm.CropID, cm.MarketID, err)
@@ -114,13 +120,13 @@ func (s *Service) RunDailyAggregation(ctx context.Context) error {
 		}
 
 		if len(observations) == 0 {
-			continue // no observations to aggregate
+			continue
 		}
 
 		// 3. Aggregate the prices
 		agg := AggregatePrices(observations, cm.CropID, cm.MarketID, "daily", observations[0].Currency, observations[0].Unit, periodStart, periodEnd)
 		if agg == nil {
-			continue // no valid aggregation
+			continue
 		}
 
 		// 4. Get the latest aggregated price for trend calculation
@@ -131,7 +137,7 @@ func (s *Service) RunDailyAggregation(ctx context.Context) error {
 
 		// 5. Calculate trend if previous aggregation exists
 		if prevAgg != nil {
-			agg.Trend = CalculateTrend(agg.PriceMean, prevAgg.PriceMean, 5.0) // using 5% threshold for trend
+			agg.Trend = CalculateTrend(agg.PriceMean, prevAgg.PriceMean, 5.0)
 		} else {
 			agg.Trend = models.TrendStable
 		}

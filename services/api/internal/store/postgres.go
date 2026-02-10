@@ -382,3 +382,54 @@ func (pg *Postgres) InsertCrop(ctx context.Context, name, unit string) (string, 
 	}
 	return id, nil
 }
+
+// GetDistinctStates returns all unique state names from the markets table, sorted alphabetically.
+func (pg *Postgres) GetDistinctStates(ctx context.Context) ([]string, error) {
+	rows, err := pg.pool.Query(ctx, `
+        SELECT DISTINCT state FROM markets ORDER BY state
+    `)
+	if err != nil {
+		return nil, fmt.Errorf("GetDistinctStates: %w", err)
+	}
+	defer rows.Close()
+
+	var states []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, fmt.Errorf("GetDistinctStates scan: %w", err)
+		}
+		states = append(states, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("GetDistinctStates rows: %w", err)
+	}
+	return states, nil
+}
+
+// GetMarketsByState returns all markets in a given state (case-insensitive).
+func (pg *Postgres) GetMarketsByState(ctx context.Context, state string) ([]models.Market, error) {
+	rows, err := pg.pool.Query(ctx, `
+        SELECT id, name, state, country, COALESCE(latitude, 0), COALESCE(longitude, 0)
+        FROM markets
+        WHERE LOWER(state) = LOWER($1)
+        ORDER BY name
+    `, state)
+	if err != nil {
+		return nil, fmt.Errorf("GetMarketsByState: %w", err)
+	}
+	defer rows.Close()
+
+	var markets []models.Market
+	for rows.Next() {
+		var m models.Market
+		if err := rows.Scan(&m.ID, &m.Name, &m.State, &m.Country, &m.Latitude, &m.Longitude); err != nil {
+			return nil, fmt.Errorf("GetMarketsByState scan: %w", err)
+		}
+		markets = append(markets, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("GetMarketsByState rows: %w", err)
+	}
+	return markets, nil
+}

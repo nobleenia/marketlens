@@ -11,6 +11,7 @@ import (
 	"marketlens/internal/config"
 	"marketlens/internal/models"
 	"marketlens/internal/store"
+	"marketlens/internal/ussd"
 )
 
 type healthResponse struct {
@@ -19,16 +20,18 @@ type healthResponse struct {
 }
 
 type Server struct {
-	cfg config.Config
-	db  *store.Postgres
-	mux *http.ServeMux
+	cfg         config.Config
+	db          *store.Postgres
+	ussdHandler *ussd.Handler
+	mux         *http.ServeMux
 }
 
-func New(cfg config.Config, db *store.Postgres) *http.Server {
+func New(cfg config.Config, db *store.Postgres, ussdH *ussd.Handler) *http.Server {
 	s := &Server{
-		cfg: cfg,
-		db:  db,
-		mux: http.NewServeMux(),
+		cfg:         cfg,
+		db:          db,
+		ussdHandler: ussdH,
+		mux:         http.NewServeMux(),
 	}
 	s.routes()
 
@@ -49,6 +52,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/v1/prices", s.handleGetPrices)     // list + filters via query params
 	s.mux.HandleFunc("/v1/prices/", s.handleGetPricePath) // /v1/prices/{crop}/{market}
 	s.mux.HandleFunc("/v1/observations", s.handlePostObservation)
+
+	// USSD API Endpoints
+	s.mux.HandleFunc("/ussd", s.ussdHandler.ServeUSSD)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
