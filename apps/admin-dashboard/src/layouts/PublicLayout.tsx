@@ -107,6 +107,59 @@ export default function PublicLayout() {
       <main className="flex-1">
         <Outlet />
       </main>
+
+      {/* ── Footer ─────────────────────────────────────────────── */}
+      <footer className="bg-[#1a5f3f] text-white">
+        <div className="container mx-auto px-4 py-10">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* Brand */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="bg-white/20 rounded-lg p-1.5">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+                <span className="font-bold text-lg">MarketLens</span>
+              </div>
+              <p className="text-white/70 text-sm leading-relaxed">
+                Real-time agricultural price transparency for Nigerian farmers, traders, and policymakers.
+              </p>
+            </div>
+
+            {/* Quick Links */}
+            <div>
+              <h4 className="font-semibold mb-3">Quick Links</h4>
+              <ul className="space-y-2 text-sm text-white/70">
+                {navLinks.map((link) => (
+                  <li key={link.to}>
+                    <Link to={link.to} className="hover:text-white transition-colors">
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Contact / Info */}
+            <div>
+              <h4 className="font-semibold mb-3">About the Project</h4>
+              <p className="text-white/70 text-sm leading-relaxed mb-3">
+                MarketLens provides price data via USSD and web so farmers can make informed selling decisions.
+              </p>
+              <Link
+                to="/admin"
+                className="inline-flex items-center gap-2 text-sm text-white/70 hover:text-white transition-colors"
+              >
+                <Settings className="w-4 h-4" />
+                Admin Portal
+              </Link>
+            </div>
+          </div>
+
+          <div className="border-t border-white/20 mt-8 pt-6 text-center text-sm text-white/50">
+            &copy; {new Date().getFullYear()} MarketLens. Built for Nigerian agriculture.
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
