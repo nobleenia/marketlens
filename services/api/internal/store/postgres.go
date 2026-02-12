@@ -309,7 +309,7 @@ func (pg *Postgres) GetAggregatedPrices(ctx context.Context, cropName, marketNam
 	}
 	defer rows.Close()
 
-	var results []models.AggregatedPrice
+	results := make([]models.AggregatedPrice, 0)
 	for rows.Next() {
 		var agg models.AggregatedPrice
 		var confidenceScore float64

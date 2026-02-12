@@ -12,9 +12,10 @@ export default function Compare() {
 
   // Fetch ALL prices for the selected crop (across all markets)
   // GET /v1/prices?crop=Tomatoes  → returns one row per market
-  const { data: prices = [], isLoading: pricesLoading } = usePrices(
+  const { data: rawPrices, isLoading: pricesLoading } = usePrices(
     selectedCrop || undefined,
   );
+  const prices = rawPrices ?? [];
 
   // ── Find the best market (highest average price) ──────────────────
   const bestPrice = useMemo(() => {
