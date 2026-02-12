@@ -13,6 +13,7 @@ import AuditLogs from './pages/admin/AuditLogs';
 import CropsPage from './pages/admin/CropsPage';
 import MarketsPage from './pages/admin/MarketsPage';
 import PricesPage from './pages/admin/PricesPage';
+import Submit from './pages/Submit';
 
 export const router = createBrowserRouter([
   {
@@ -21,6 +22,7 @@ export const router = createBrowserRouter([
       { path: '/', element: <Home /> },
       { path: '/trends', element: <Trends /> },
       { path: '/compare', element: <Compare /> },
+      { path: '/submit', element: <Submit /> },
       { path: '/about', element: <About /> },
     ],
   },

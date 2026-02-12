@@ -20,7 +20,7 @@ func pageItems[T any](items []T, page, perPage int) (visible []T, hasNext bool) 
 }
 
 func renderMainMenu() string {
-	return "CON Welcome to MarketLens\n1. Latest price\n2. Help\n3. Exit"
+	return "CON Welcome to MarketLens\n1. Latest price\n2. Report price\n3. Help\n4. Exit"
 }
 
 func renderSelectState(states []string, page, perPage int) string {
@@ -109,6 +109,18 @@ func renderShowPrice(agg *models.AggregatedPrice) string {
 		agg.Confidence,
 		agg.UpdatedAt.Format("2006-01-02 15:04"),
 	)
+}
+
+func renderEnterPrice(cropName, marketName string) string {
+	return fmt.Sprintf("CON Report price for\n%s @ %s\n\nEnter price in Naira:", cropName, marketName)
+}
+
+func renderConfirmPrice(cropName, marketName string, price float64) string {
+	return fmt.Sprintf("CON You are reporting:\n%s @ %s\nPrice: NGN%.2f\n\n1. Confirm\n2. Re-enter price\n0. Cancel", cropName, marketName, price)
+}
+
+func renderPriceSubmitted() string {
+	return "END Thank you! Your price report has been submitted and will be reviewed."
 }
 
 func renderHelp() string {

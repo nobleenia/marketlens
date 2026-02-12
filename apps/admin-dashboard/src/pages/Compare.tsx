@@ -18,7 +18,7 @@ export default function Compare() {
 
   // ── Find the best market (highest average price) ──────────────────
   const bestPrice = useMemo(() => {
-    if (prices.length === 0) return null;
+    if (!prices || prices.length === 0) return null;
     return prices.reduce((best, current) => {
       const bestAvg = (best.price_min + best.price_max) / 2;
       const currentAvg = (current.price_min + current.price_max) / 2;
@@ -27,7 +27,7 @@ export default function Compare() {
   }, [prices]);
 
   // ── Unit from the first price row (same crop = same unit) ─────────
-  const unit = prices.length > 0 ? prices[0].unit : '';
+  const unit = prices && prices.length > 0 ? prices[0].unit : '';
 
   // ── Dropdown handler with URL sync ────────────────────────────────
   const handleCropChange = (name: string) => {

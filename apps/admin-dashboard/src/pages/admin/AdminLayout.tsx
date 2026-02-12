@@ -8,8 +8,10 @@ import {
   Menu,
   X,
   ScrollText,
+  LogOut,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import AdminLogin from './AdminLogin';
 
 const navItems = [
   { to: '/admin', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
@@ -23,7 +25,29 @@ const navItems = [
 export default function AdminLayout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  
+  const [adminKey, setAdminKey] = useState<string | null>(null);
+
+  // Restore key from sessionStorage on mount
+  useEffect(() => {
+    const stored = sessionStorage.getItem('ml_admin_key');
+    if (stored) setAdminKey(stored);
+  }, []);
+
+  const handleLogin = (key: string) => {
+    sessionStorage.setItem('ml_admin_key', key);
+    setAdminKey(key);
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('ml_admin_key');
+    setAdminKey(null);
+  };
+
+  // Show login gate if not authenticated
+  if (adminKey === null && !sessionStorage.getItem('ml_admin_key')) {
+    return <AdminLogin onLogin={handleLogin} />;
+  }
+
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Mobile Header */}
@@ -41,7 +65,7 @@ export default function AdminLayout() {
           {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
       </div>
-      
+
       <div className="flex">
         {/* Sidebar */}
         <aside
@@ -60,57 +84,57 @@ export default function AdminLayout() {
               </div>
               <div>
                 <h1 className="font-bold text-[#1a5f3f]">MarketLens</h1>
-                <p className="text-xs text-gray-600">Admin Panel</p>
+                <p className="text-xs text-gray-500">Admin Panel</p>
               </div>
             </Link>
           </div>
-          
-          {/* Navigation */}
-          <nav className="p-4 space-y-2">
+
+          {/* Nav */}
+          <nav className="p-4 space-y-1">
             {navItems.map((item) => {
-              const isActive = location.pathname === item.to;
+              const isActive = item.to === '/admin'
+                ? location.pathname === '/admin'
+                : location.pathname.startsWith(item.to);
               return (
                 <Link
                   key={item.to}
                   to={item.to}
                   onClick={() => setSidebarOpen(false)}
-                  className={`
-                    flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
-                    ${
-                      isActive
-                        ? 'bg-[#1a5f3f] text-white'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }
-                  `}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-sm font-medium ${
+                    isActive
+                      ? 'bg-[#e8f5e9] text-[#1a5f3f]'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
                 >
                   {item.icon}
-                  <span className="font-medium">{item.label}</span>
+                  {item.label}
                 </Link>
               );
             })}
           </nav>
-          
-          {/* Back to Public Site */}
+
+          {/* Logout */}
           <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
-            <Link
-              to="/"
-              className="flex items-center justify-center gap-2 px-4 py-3 text-[#1a5f3f] border-2 border-[#1a5f3f] rounded-lg hover:bg-[#e8f5e9] transition-colors font-medium"
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 w-full transition-colors"
             >
-              ← Back to Public Site
-            </Link>
+              <LogOut className="w-5 h-5" />
+              Logout
+            </button>
           </div>
         </aside>
-        
-        {/* Mobile Overlay */}
+
+        {/* Overlay */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
+            className="fixed inset-0 bg-black/50 z-30 lg:hidden"
             onClick={() => setSidebarOpen(false)}
           />
         )}
-        
-        {/* Main Content */}
-        <main className="flex-1 min-h-screen lg:h-screen overflow-auto">
+
+        {/* Content */}
+        <main className="flex-1 min-w-0">
           <Outlet />
         </main>
       </div>

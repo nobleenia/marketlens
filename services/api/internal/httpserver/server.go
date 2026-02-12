@@ -32,8 +32,7 @@ type Server struct {
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -70,11 +69,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/v1/prices/", s.handleGetPricePath) // /v1/prices/{crop}/{market}
 	s.mux.HandleFunc("/v1/observations", s.handlePostObservation)
 
-	// Admin endpoints
+	// Admin endpoints — all behind API key auth
 	adminMux := http.NewServeMux()
-	s.mux.HandleFunc("/v1/admin/observations", s.handleListObservations)
-	s.mux.HandleFunc("/v1/admin/observations/", s.handleAdminObservation) // PATCH /v1/admin/observations/{id}
-	s.mux.HandleFunc("/v1/admin/audit", s.handleListAuditLogs)
+	adminMux.HandleFunc("/v1/admin/observations", s.handleListObservations)
+	adminMux.HandleFunc("/v1/admin/observations/", s.handleAdminObservation) // PATCH /v1/admin/observations/{id}
+	adminMux.HandleFunc("/v1/admin/audit", s.handleListAuditLogs)
 
 	adminHandler := auth.APIKeyAuth(s.cfg.AdminAPIKey)(adminMux)
 	s.mux.Handle("/v1/admin/", adminHandler)

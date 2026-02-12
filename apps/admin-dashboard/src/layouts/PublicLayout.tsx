@@ -1,11 +1,12 @@
 import { Link, NavLink, Outlet } from 'react-router';
-import { Home, TrendingUp, GitCompareArrows, Info, Settings, Menu, X } from 'lucide-react';
+import { Home, TrendingUp, GitCompareArrows, Info, Settings, Menu, X, Send } from 'lucide-react';
 import { useState } from 'react';
 
 const navLinks = [
   { to: '/', label: 'Prices', icon: <Home className="w-5 h-5" /> },
   { to: '/trends', label: 'Trends', icon: <TrendingUp className="w-5 h-5" /> },
   { to: '/compare', label: 'Compare', icon: <GitCompareArrows className="w-5 h-5" /> },
+  { to: '/submit', label: 'Submit', icon: <Send className="w-5 h-5" /> },
   { to: '/about', label: 'About', icon: <Info className="w-5 h-5" /> },
 ];
 
