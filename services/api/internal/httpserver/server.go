@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -66,6 +67,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/v1/prices", s.handleGetPrices)     // list + filters via query params
 	s.mux.HandleFunc("/v1/prices/", s.handleGetPricePath) // /v1/prices/{crop}/{market}
 	s.mux.HandleFunc("/v1/observations", s.handlePostObservation)
+
+	// Admin endpoints
+	s.mux.HandleFunc("/v1/admin/observations", s.handleListObservations)
+	s.mux.HandleFunc("/v1/admin/observations/", s.handleAdminObservation) // PATCH /v1/admin/observations/{id}
+	s.mux.HandleFunc("/v1/admin/audit", s.handleListAuditLogs)
 
 	// USSD API Endpoints
 	s.mux.HandleFunc("/ussd", s.ussdHandler.ServeUSSD)
@@ -279,4 +285,139 @@ func (s *Server) handlePostObservation(w http.ResponseWriter, r *http.Request) {
 func writeJSON(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func (s *Server) handleListObservations(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	q := r.URL.Query()
+	crop := q.Get("crop")
+	market := q.Get("market")
+	status := q.Get("status")
+	limit := intParam(q.Get("limit"), 50)
+	offset := intParam(q.Get("offset"), 0)
+
+	obs, total, err := s.db.ListObservations(r.Context(), crop, market, status, limit, offset)
+	if err != nil {
+		log.Printf("handleListObservations error: %v", err)
+		http.Error(w, "failed to list observations", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]interface{}{
+		"data":   obs,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
+func (s *Server) handleAdminObservation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := strings.TrimPrefix(r.URL.Path, "/v1/admin/observations/")
+	if id == "" {
+		http.Error(w, "observation ID required", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Status  string `json:"status"` // approve, flag, reject
+		Reason  string `json:"reason"`
+		AdminID string `json:"admin_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Validate status
+	validStatuses := map[string]bool{"approved": true, "flagged": true, "rejected": true}
+	if !validStatuses[req.Status] {
+		http.Error(w, "status must be 'approved', 'flagged', or 'rejected'", http.StatusBadRequest)
+		return
+	}
+	if req.AdminID == "" {
+		req.AdminID = "admin" // default for MVP
+	}
+
+	ctx := r.Context()
+
+	// Get current observation for audit snapshot
+	obs, err := s.db.GetObservationByID(ctx, id)
+	if err != nil {
+		log.Printf("handleAdminObservation GetObservationByID error: %v", err)
+		http.Error(w, "observation not found", http.StatusNotFound)
+		return
+	}
+
+	oldStatus := obs.Status
+
+	// Update status
+	if err := s.db.UpdateObservationStatus(ctx, id, req.Status); err != nil {
+		log.Printf("handleAdminObservation UpdateObservationStatus error: %v", err)
+		http.Error(w, "failed to update observation", http.StatusInternalServerError)
+		return
+	}
+
+	// Record audit log
+	oldJSON, _ := json.Marshal(map[string]string{"status": oldStatus})
+	newJSON, _ := json.Marshal(map[string]string{"status": req.Status})
+
+	auditLog := models.AuditLog{
+		AdminID:    req.AdminID,
+		Action:     req.Status, // "approved", "flagged", "rejected"
+		EntityType: "price_observation",
+		EntityID:   id,
+		OldValue:   string(oldJSON),
+		NewValue:   string(newJSON),
+		Reason:     req.Reason,
+	}
+	if err := s.db.InsertAuditLog(ctx, auditLog); err != nil {
+		log.Printf("handleAdminObservation InsertAuditLog error: %v", err)
+		// Non-fatal — the status was already updated
+	}
+
+	writeJSON(w, map[string]string{"status": "updated", "new_status": req.Status})
+}
+
+func (s *Server) handleListAuditLogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	q := r.URL.Query()
+	entityType := q.Get("entity_type")
+	entityID := q.Get("entity_id")
+	limit := intParam(q.Get("limit"), 50)
+	offset := intParam(q.Get("offset"), 0)
+
+	logs, total, err := s.db.ListAuditLogs(r.Context(), entityType, entityID, limit, offset)
+	if err != nil {
+		log.Printf("handleListAuditLogs error: %v", err)
+		http.Error(w, "failed to list audit logs", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]interface{}{
+		"data":   logs,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
+// intParam parses a query string int with a default fallback.
+func intParam(s string, defaultVal int) int {
+	if s == "" {
+		return defaultVal
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 {
+		return defaultVal
+	}
+	return n
 }

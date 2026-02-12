@@ -39,3 +39,40 @@ export interface Trend {
     date: string;
     price: number;
 }
+
+export interface PriceObservation {
+  id: string;
+  crop_id: string;
+  crop_name: string;
+  market_id: string;
+  market_name: string;
+  observed_at: string;
+  price: number;
+  currency: string;
+  unit: string;
+  source: string;
+  reporter_id: string;
+  notes: string;
+  confidence_score: number;
+  status: string;       // pending | approved | flagged | rejected
+  created_at: string;
+}
+
+export interface AuditLog {
+  id: string;
+  admin_id: string;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  old_value: string;
+  new_value: string;
+  reason: string;
+  created_at: string;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}

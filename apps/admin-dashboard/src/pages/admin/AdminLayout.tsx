@@ -7,12 +7,14 @@ import {
   Sprout,
   Menu,
   X,
+  ScrollText,
 } from 'lucide-react';
 import { useState } from 'react';
 
 const navItems = [
   { to: '/admin', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
   { to: '/admin/submissions', label: 'Price Submissions', icon: <FileText className="w-5 h-5" /> },
+  { to: '/admin/audit', label: 'Audit Log', icon: <ScrollText className="w-5 h-5" /> },
   { to: '/admin/prices', label: 'Aggregated Prices', icon: <CheckSquare className="w-5 h-5" /> },
   { to: '/admin/markets', label: 'Markets', icon: <Store className="w-5 h-5" /> },
   { to: '/admin/crops', label: 'Crops', icon: <Sprout className="w-5 h-5" /> },

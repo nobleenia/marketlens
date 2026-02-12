@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
-import type { Crop, Market, AggregatedPrice } from "./types";
+import type { Crop, Market, AggregatedPrice, PriceObservation, AuditLog, PaginatedResponse } from "./types";
 
 // ── Fetch all crops (used by every page's dropdown) ──────────────────
 export function useCrops() {
@@ -59,5 +59,59 @@ export function usePrice(cropName?: string, marketName?: string) {
         `/v1/prices/${encodeURIComponent(cropName!)}/${encodeURIComponent(marketName!)}`
       ),
     enabled: !!cropName && !!marketName, // only fire when both selected
+  });
+}
+
+// ── Admin hooks ─────────────────────────────────────────────────────
+
+export function useObservations(crop?: string, market?: string, status?: string, limit = 50, offset = 0) {
+  const params = new URLSearchParams();
+  if (crop) params.set('crop', crop);
+  if (market) params.set('market', market);
+  if (status) params.set('status', status);
+  params.set('limit', String(limit));
+  params.set('offset', String(offset));
+
+  return useQuery<PaginatedResponse<PriceObservation>>({
+    queryKey: ['observations', crop, market, status, limit, offset],
+    queryFn: () => apiFetch(`/v1/admin/observations?${params}`),
+  });
+}
+
+export function useAuditLogs(entityType?: string, entityId?: string, limit = 50, offset = 0) {
+  const params = new URLSearchParams();
+  if (entityType) params.set('entity_type', entityType);
+  if (entityId) params.set('entity_id', entityId);
+  params.set('limit', String(limit));
+  params.set('offset', String(offset));
+
+  return useQuery<PaginatedResponse<AuditLog>>({
+    queryKey: ['audit-logs', entityType, entityId, limit, offset],
+    queryFn: () => apiFetch(`/v1/admin/audit?${params}`),
+  });
+}
+
+export function useUpdateObservationStatus() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    { status: string; new_status: string },
+    Error,
+    { id: string; status: string; reason: string; adminId?: string }
+  >({
+    mutationFn: ({ id, status, reason, adminId }) =>
+      apiFetch(`/v1/admin/observations/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status,
+          reason,
+          admin_id: adminId || 'admin',
+        }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['observations'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs'] });
+    },
   });
 }

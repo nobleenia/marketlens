@@ -433,3 +433,192 @@ func (pg *Postgres) GetMarketsByState(ctx context.Context, state string) ([]mode
 	}
 	return markets, nil
 }
+
+// ── Admin: Observations listing ────────────────────────────────────
+
+// ListObservations returns price_observations with optional filters and pagination.
+func (pg *Postgres) ListObservations(ctx context.Context, cropName, marketName, status string, limit, offset int) ([]models.PriceObservation, int, error) {
+	where := "WHERE 1=1"
+	args := []interface{}{}
+	argIdx := 1
+
+	if cropName != "" {
+		where += fmt.Sprintf(" AND LOWER(c.name) = LOWER($%d)", argIdx)
+		args = append(args, cropName)
+		argIdx++
+	}
+	if marketName != "" {
+		where += fmt.Sprintf(" AND LOWER(m.name) = LOWER($%d)", argIdx)
+		args = append(args, marketName)
+		argIdx++
+	}
+	if status != "" {
+		where += fmt.Sprintf(" AND po.status = $%d", argIdx)
+		args = append(args, status)
+		argIdx++
+	}
+
+	// Count total
+	countQuery := fmt.Sprintf(`
+        SELECT COUNT(*) FROM price_observations po
+        JOIN crops c ON c.id = po.crop_id
+        JOIN markets m ON m.id = po.market_id
+        %s`, where)
+
+	var total int
+	if err := pg.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("ListObservations count: %w", err)
+	}
+
+	// Fetch page
+	if limit <= 0 {
+		limit = 50
+	}
+	dataQuery := fmt.Sprintf(`
+        SELECT po.id, po.crop_id, c.name, po.market_id, m.name,
+               po.observed_at, po.price, po.currency, po.unit,
+               po.source, COALESCE(po.reporter_id, ''), COALESCE(po.notes, ''),
+               po.confidence_score, po.status, po.created_at
+        FROM price_observations po
+        JOIN crops c ON c.id = po.crop_id
+        JOIN markets m ON m.id = po.market_id
+        %s
+        ORDER BY po.created_at DESC
+        LIMIT $%d OFFSET $%d`, where, argIdx, argIdx+1)
+	args = append(args, limit, offset)
+
+	rows, err := pg.pool.Query(ctx, dataQuery, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("ListObservations: %w", err)
+	}
+	defer rows.Close()
+
+	var results []models.PriceObservation
+	for rows.Next() {
+		var o models.PriceObservation
+		var cropName, marketName string
+		if err := rows.Scan(
+			&o.ID, &o.CropID, &cropName, &o.MarketID, &marketName,
+			&o.ObservedAt, &o.Price, &o.Currency, &o.Unit,
+			&o.Source, &o.ReporterID, &o.Notes,
+			&o.ConfidenceScore, &o.Status, &o.CreatedAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("ListObservations scan: %w", err)
+		}
+		// Attach names for JSON response convenience
+		o.CropName = cropName
+		o.MarketName = marketName
+		results = append(results, o)
+	}
+	return results, total, rows.Err()
+}
+
+// UpdateObservationStatus sets the status of a price_observation.
+func (pg *Postgres) UpdateObservationStatus(ctx context.Context, id, status string) error {
+	tag, err := pg.pool.Exec(ctx, `
+        UPDATE price_observations SET status = $1 WHERE id = $2
+    `, status, id)
+	if err != nil {
+		return fmt.Errorf("UpdateObservationStatus: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("UpdateObservationStatus: observation not found")
+	}
+	return nil
+}
+
+// GetObservationByID returns a single price_observation by ID.
+func (pg *Postgres) GetObservationByID(ctx context.Context, id string) (*models.PriceObservation, error) {
+	var o models.PriceObservation
+	var cropName, marketName string
+	err := pg.pool.QueryRow(ctx, `
+        SELECT po.id, po.crop_id, c.name, po.market_id, m.name,
+               po.observed_at, po.price, po.currency, po.unit,
+               po.source, COALESCE(po.reporter_id, ''), COALESCE(po.notes, ''),
+               po.confidence_score, po.status, po.created_at
+        FROM price_observations po
+        JOIN crops c ON c.id = po.crop_id
+        JOIN markets m ON m.id = po.market_id
+        WHERE po.id = $1
+    `, id).Scan(
+		&o.ID, &o.CropID, &cropName, &o.MarketID, &marketName,
+		&o.ObservedAt, &o.Price, &o.Currency, &o.Unit,
+		&o.Source, &o.ReporterID, &o.Notes,
+		&o.ConfidenceScore, &o.Status, &o.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("GetObservationByID: %w", err)
+	}
+	o.CropName = cropName
+	o.MarketName = marketName
+	return &o, nil
+}
+
+// ── Admin: Audit logs ──────────────────────────────────────────────
+
+// InsertAuditLog records an admin action.
+func (pg *Postgres) InsertAuditLog(ctx context.Context, log models.AuditLog) error {
+	_, err := pg.pool.Exec(ctx, `
+        INSERT INTO audit_logs (admin_id, action, entity_type, entity_id, old_value, new_value, reason)
+        VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7)
+    `, log.AdminID, log.Action, log.EntityType, log.EntityID, log.OldValue, log.NewValue, log.Reason)
+	if err != nil {
+		return fmt.Errorf("InsertAuditLog: %w", err)
+	}
+	return nil
+}
+
+// ListAuditLogs returns audit logs with optional entity filter and pagination.
+func (pg *Postgres) ListAuditLogs(ctx context.Context, entityType, entityID string, limit, offset int) ([]models.AuditLog, int, error) {
+	where := "WHERE 1=1"
+	args := []interface{}{}
+	argIdx := 1
+
+	if entityType != "" {
+		where += fmt.Sprintf(" AND entity_type = $%d", argIdx)
+		args = append(args, entityType)
+		argIdx++
+	}
+	if entityID != "" {
+		where += fmt.Sprintf(" AND entity_id = $%d", argIdx)
+		args = append(args, entityID)
+		argIdx++
+	}
+
+	var total int
+	countQ := fmt.Sprintf("SELECT COUNT(*) FROM audit_logs %s", where)
+	if err := pg.pool.QueryRow(ctx, countQ, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("ListAuditLogs count: %w", err)
+	}
+
+	if limit <= 0 {
+		limit = 50
+	}
+	dataQ := fmt.Sprintf(`
+        SELECT id, admin_id, action, entity_type, entity_id,
+               COALESCE(old_value::text, ''), COALESCE(new_value::text, ''),
+               reason, created_at
+        FROM audit_logs %s
+        ORDER BY created_at DESC
+        LIMIT $%d OFFSET $%d`, where, argIdx, argIdx+1)
+	args = append(args, limit, offset)
+
+	rows, err := pg.pool.Query(ctx, dataQ, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("ListAuditLogs: %w", err)
+	}
+	defer rows.Close()
+
+	var results []models.AuditLog
+	for rows.Next() {
+		var l models.AuditLog
+		if err := rows.Scan(
+			&l.ID, &l.AdminID, &l.Action, &l.EntityType, &l.EntityID,
+			&l.OldValue, &l.NewValue, &l.Reason, &l.CreatedAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("ListAuditLogs scan: %w", err)
+		}
+		results = append(results, l)
+	}
+	return results, total, rows.Err()
+}

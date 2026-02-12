@@ -21,7 +21,9 @@ const (
 type PriceObservation struct {
 	ID              string    `json:"id"`
 	CropID          string    `json:"crop_id"`
+	CropName        string    `json:"crop_name,omitempty"`
 	MarketID        string    `json:"market_id"`
+	MarketName      string    `json:"market_name,omitempty"`
 	ObservedAt      time.Time `json:"observed_at"`
 	Price           float64   `json:"price"`
 	Currency        string    `json:"currency"`
@@ -32,6 +34,7 @@ type PriceObservation struct {
 	Notes           string    `json:"notes"`
 	ConfidenceScore float64   `json:"confidence_score"`
 	CreatedAt       time.Time `json:"created_at"`
+	Status          string    `json:"status"`
 }
 
 type AggregatedPrice struct {
@@ -97,4 +100,16 @@ type Crop struct {
 type CropMarketCombination struct {
 	CropID   string
 	MarketID string
+}
+
+type AuditLog struct {
+	ID         string    `json:"id"`
+	AdminID    string    `json:"admin_id"`
+	Action     string    `json:"action"`
+	EntityType string    `json:"entity_type"`
+	EntityID   string    `json:"entity_id"`
+	OldValue   string    `json:"old_value,omitempty"`
+	NewValue   string    `json:"new_value,omitempty"`
+	Reason     string    `json:"reason"`
+	CreatedAt  time.Time `json:"created_at"`
 }
