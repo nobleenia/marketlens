@@ -10,6 +10,9 @@ import AdminLayout from './pages/admin/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import Submissions from './pages/admin/Submissions';
 import AuditLogs from './pages/admin/AuditLogs';
+import CropsPage from './pages/admin/CropsPage';
+import MarketsPage from './pages/admin/MarketsPage';
+import PricesPage from './pages/admin/PricesPage';
 
 export const router = createBrowserRouter([
   {
@@ -28,10 +31,9 @@ export const router = createBrowserRouter([
       { index: true, element: <AdminDashboard /> },
       { path: 'submissions', element: <Submissions /> },
       { path: 'audit', element: <AuditLogs /> },
-      // placeholders for Sprint 1.10
-      // { path: 'prices', element: <AggregatedPrices /> },
-      // { path: 'markets', element: <MarketsPage /> },
-      // { path: 'crops', element: <CropsPage /> },
+      { path: 'prices', element: <PricesPage /> },
+      { path: 'markets', element: <MarketsPage /> },
+      { path: 'crops', element: <CropsPage /> },
     ],
   },
 ]);
