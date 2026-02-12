@@ -1,5 +1,4 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8081';
-const API_KEY = import.meta.env.VITE_ADMIN_API_KEY || '';
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
@@ -7,9 +6,14 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     ...(init?.headers as Record<string, string>),
   };
 
-  // Add API key for admin endpoints
-  if (API_KEY && path.startsWith('/v1/admin')) {
-    headers['X-API-Key'] = API_KEY;
+  // Add API key for admin endpoints from sessionStorage or env
+  if (path.startsWith('/v1/admin')) {
+    const key = sessionStorage.getItem('ml_admin_key')
+      || import.meta.env.VITE_ADMIN_API_KEY
+      || '';
+    if (key) {
+      headers['X-API-Key'] = key;
+    }
   }
 
   const res = await fetch(`${API_BASE}${path}`, {

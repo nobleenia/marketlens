@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"log"
 	"marketlens/internal/config"
+	"marketlens/internal/models"
 	"marketlens/internal/store"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -34,6 +36,8 @@ func NewHandler(cfg config.Config, rdb *redis.Client, store *store.Postgres) *Ha
 // ServeUSSD handles the Africa's Talking USSD webhook POST.
 //
 // Flow: MAIN_MENU → SELECT_STATE → SELECT_CROP → SELECT_MARKET → SHOW_PRICE
+//
+//	MAIN_MENU → REPORT_STATE → REPORT_CROP → REPORT_MARKET → ENTER_PRICE → CONFIRM_PRICE
 func (h *Handler) ServeUSSD(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 
@@ -109,9 +113,21 @@ func (h *Handler) ServeUSSD(w http.ResponseWriter, r *http.Request) {
 			_ = h.saveSession(ctx, sessionID, session)
 			response = renderSelectState(states, session.Page, perPage)
 		case "2":
+			states, err := h.store.GetDistinctStates(ctx)
+			if err != nil || len(states) == 0 {
+				response = "END No states available now."
+				_ = h.deleteSession(ctx, sessionID)
+				break
+			}
+			session.State = "REPORT_STATE"
+			session.Page = 0
+			session.Tries = 0
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderSelectState(states, session.Page, perPage)
+		case "3":
 			response = renderHelp()
 			_ = h.deleteSession(ctx, sessionID)
-		case "3":
+		case "4":
 			response = renderGoodbye()
 			_ = h.deleteSession(ctx, sessionID)
 		default:
@@ -274,7 +290,223 @@ func (h *Handler) ServeUSSD(w http.ResponseWriter, r *http.Request) {
 		response = renderShowPrice(agg)
 		_ = h.deleteSession(ctx, sessionID)
 
-	// ── UNKNOWN → RESET ───────────────────────────────────────
+		// ── REPORT: SELECT STATE ──────────────────────────────────
+	case "REPORT_STATE":
+		states, _ := h.store.GetDistinctStates(ctx)
+
+		if last == "0" {
+			session.State = "MAIN_MENU"
+			session.Page = 0
+			session.Tries = 0
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderMainMenu()
+			break
+		}
+		if last == "00" {
+			session.Page++
+			session.Tries = 0
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderSelectState(states, session.Page, perPage)
+			break
+		}
+		if last == "98" && session.Page > 0 {
+			session.Page--
+			session.Tries = 0
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderSelectState(states, session.Page, perPage)
+			break
+		}
+
+		idx, err := strconv.Atoi(last)
+		if err != nil || idx <= 0 {
+			session.Tries++
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderError()
+			break
+		}
+		absIdx := session.Page*perPage + idx - 1
+		if absIdx >= len(states) {
+			session.Tries++
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderError()
+			break
+		}
+		session.ChosenState = states[absIdx]
+		session.Tries = 0
+		session.Page = 0
+		session.State = "REPORT_CROP"
+		_ = h.saveSession(ctx, sessionID, session)
+
+		crops, _ := h.store.GetAllCrops(ctx)
+		response = renderSelectCrop(crops, session.Page, perPage)
+
+	// ── REPORT: SELECT CROP ───────────────────────────────────
+	case "REPORT_CROP":
+		crops, _ := h.store.GetAllCrops(ctx)
+
+		if last == "0" {
+			states, _ := h.store.GetDistinctStates(ctx)
+			session.State = "REPORT_STATE"
+			session.Page = 0
+			session.Tries = 0
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderSelectState(states, session.Page, perPage)
+			break
+		}
+		if last == "00" {
+			session.Page++
+			session.Tries = 0
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderSelectCrop(crops, session.Page, perPage)
+			break
+		}
+		if last == "98" && session.Page > 0 {
+			session.Page--
+			session.Tries = 0
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderSelectCrop(crops, session.Page, perPage)
+			break
+		}
+
+		idx, err := strconv.Atoi(last)
+		if err != nil || idx <= 0 {
+			session.Tries++
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderError()
+			break
+		}
+		absIdx := session.Page*perPage + idx - 1
+		if absIdx >= len(crops) {
+			session.Tries++
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderError()
+			break
+		}
+		chosen := crops[absIdx]
+		session.ChosenCropID = chosen.ID
+		session.ChosenCropName = chosen.Name
+		session.Tries = 0
+		session.Page = 0
+		session.State = "REPORT_MARKET"
+		_ = h.saveSession(ctx, sessionID, session)
+
+		markets, _ := h.store.GetMarketsByState(ctx, session.ChosenState)
+		response = renderSelectMarket(markets, session.Page, perPage)
+
+	// ── REPORT: SELECT MARKET ─────────────────────────────────
+	case "REPORT_MARKET":
+		markets, _ := h.store.GetMarketsByState(ctx, session.ChosenState)
+
+		if last == "0" {
+			crops, _ := h.store.GetAllCrops(ctx)
+			session.State = "REPORT_CROP"
+			session.Page = 0
+			session.Tries = 0
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderSelectCrop(crops, session.Page, perPage)
+			break
+		}
+		if last == "00" {
+			session.Page++
+			session.Tries = 0
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderSelectMarket(markets, session.Page, perPage)
+			break
+		}
+		if last == "98" && session.Page > 0 {
+			session.Page--
+			session.Tries = 0
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderSelectMarket(markets, session.Page, perPage)
+			break
+		}
+
+		idx, err := strconv.Atoi(last)
+		if err != nil || idx <= 0 {
+			session.Tries++
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderError()
+			break
+		}
+		absIdx := session.Page*perPage + idx - 1
+		if absIdx >= len(markets) {
+			session.Tries++
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderError()
+			break
+		}
+		chosenMarket := markets[absIdx]
+		session.ChosenMarketID = chosenMarket.ID
+		session.ChosenMarketName = chosenMarket.Name
+		session.Tries = 0
+		session.State = "ENTER_PRICE"
+		_ = h.saveSession(ctx, sessionID, session)
+		response = renderEnterPrice(session.ChosenCropName, session.ChosenMarketName)
+
+	// ── REPORT: ENTER PRICE ───────────────────────────────────
+	case "ENTER_PRICE":
+		if last == "0" {
+			markets, _ := h.store.GetMarketsByState(ctx, session.ChosenState)
+			session.State = "REPORT_MARKET"
+			session.Page = 0
+			session.Tries = 0
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderSelectMarket(markets, session.Page, perPage)
+			break
+		}
+
+		price, err := strconv.ParseFloat(last, 64)
+		if err != nil || price <= 0 {
+			session.Tries++
+			_ = h.saveSession(ctx, sessionID, session)
+			response = "CON Invalid price. Enter a number greater than 0:"
+			break
+		}
+		session.ReportedPrice = price
+		session.Tries = 0
+		session.State = "CONFIRM_PRICE"
+		_ = h.saveSession(ctx, sessionID, session)
+		response = renderConfirmPrice(session.ChosenCropName, session.ChosenMarketName, price)
+
+	// ── REPORT: CONFIRM PRICE ─────────────────────────────────
+	case "CONFIRM_PRICE":
+		switch last {
+		case "1": // Confirm
+			obs := models.PriceObservation{
+				CropID:          session.ChosenCropID,
+				MarketID:        session.ChosenMarketID,
+				ObservedAt:      time.Now().UTC(),
+				Price:           session.ReportedPrice,
+				Currency:        "NGN",
+				Unit:            "kg",
+				PriceType:       "unknown",
+				Source:          "ussd",
+				ReporterID:      phone,
+				Notes:           "",
+				ConfidenceScore: 0.40,
+			}
+			if err := h.store.InsertPriceObservation(ctx, obs); err != nil {
+				log.Printf("USSD InsertPriceObservation error: %v", err)
+				response = "END Sorry, we could not save your report. Please try again later."
+			} else {
+				response = renderPriceSubmitted()
+			}
+			_ = h.deleteSession(ctx, sessionID)
+		case "2": // Re-enter
+			session.State = "ENTER_PRICE"
+			session.Tries = 0
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderEnterPrice(session.ChosenCropName, session.ChosenMarketName)
+		case "0": // Cancel
+			response = renderGoodbye()
+			_ = h.deleteSession(ctx, sessionID)
+		default:
+			session.Tries++
+			_ = h.saveSession(ctx, sessionID, session)
+			response = renderError()
+		}
+
+		// ── UNKNOWN → RESET ───────────────────────────────────────
 	default:
 		session.State = "MAIN_MENU"
 		session.Page = 0

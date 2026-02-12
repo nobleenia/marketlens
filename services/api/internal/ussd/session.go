@@ -11,14 +11,15 @@ import (
 
 // Session represents USSD session state.
 type Session struct {
-	State            string `json:"state"` // MAIN_MENU, SELECT_STATE, SELECT_CROP, SELECT_MARKET
-	ChosenState      string `json:"chosen_state"`
-	ChosenCropID     string `json:"chosen_crop_id"`
-	ChosenCropName   string `json:"chosen_crop_name"`
-	ChosenMarketID   string `json:"chosen_market_id"`
-	ChosenMarketName string `json:"chosen_market_name"`
-	Page             int    `json:"page"` // current page (0-indexed) for paginated lists
-	Tries            int    `json:"tries"`
+	State            string  `json:"state"` // MAIN_MENU, SELECT_STATE, SELECT_CROP, SELECT_MARKET
+	ChosenState      string  `json:"chosen_state"`
+	ChosenCropID     string  `json:"chosen_crop_id"`
+	ChosenCropName   string  `json:"chosen_crop_name"`
+	ChosenMarketID   string  `json:"chosen_market_id"`
+	ChosenMarketName string  `json:"chosen_market_name"`
+	ReportedPrice    float64 `json:"reported_price,omitempty"`
+	Page             int     `json:"page"` // current page (0-indexed) for paginated lists
+	Tries            int     `json:"tries"`
 }
 
 // Key: ussd:session:{sessionId}
