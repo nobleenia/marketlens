@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"marketlens/internal/auth"
 	"marketlens/internal/config"
 	"marketlens/internal/models"
 	"marketlens/internal/store"
@@ -33,6 +34,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -69,12 +71,17 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/v1/observations", s.handlePostObservation)
 
 	// Admin endpoints
+	adminMux := http.NewServeMux()
 	s.mux.HandleFunc("/v1/admin/observations", s.handleListObservations)
 	s.mux.HandleFunc("/v1/admin/observations/", s.handleAdminObservation) // PATCH /v1/admin/observations/{id}
 	s.mux.HandleFunc("/v1/admin/audit", s.handleListAuditLogs)
 
+	adminHandler := auth.APIKeyAuth(s.cfg.AdminAPIKey)(adminMux)
+	s.mux.Handle("/v1/admin/", adminHandler)
+
 	// USSD API Endpoints
-	s.mux.HandleFunc("/ussd", s.ussdHandler.ServeUSSD)
+	ussdHandler := auth.RateLimiter(s.cfg.USSDRateLimit)(http.HandlerFunc(s.ussdHandler.ServeUSSD))
+	s.mux.Handle("/ussd", ussdHandler)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

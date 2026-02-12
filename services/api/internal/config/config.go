@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 )
 
 func (c Config) PostgresDSN() string {
@@ -33,6 +34,9 @@ type Config struct {
 	AfricaTalkingAPIKey string
 
 	USSDWebHookSecret string
+
+	AdminAPIKey   string
+	USSDRateLimit int // requests per minute per IP
 }
 
 func FromEnv() Config {
@@ -53,6 +57,9 @@ func FromEnv() Config {
 		AfricaTalkingAPIKey: getEnv("AT_API", "africatalking_api_key"),
 
 		USSDWebHookSecret: getEnv("USSD_WEBHOOK_SECRET", ""),
+
+		AdminAPIKey:   getEnv("ADMIN_API_KEY", ""),
+		USSDRateLimit: getEnvInt("USSD_RATE_LIMIT", 30),
 	}
 }
 
@@ -61,4 +68,16 @@ func getEnv(key, defaultValue string) string {
 		return v
 	}
 	return defaultValue
+}
+
+func getEnvInt(key string, defaultValue int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultValue
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return defaultValue
+	}
+	return n
 }
