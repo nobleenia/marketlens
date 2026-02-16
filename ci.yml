@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: marketlens
+          POSTGRES_DB: marketlens
+          POSTGRES_PASSWORD: marketlens
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U marketlens -d marketlens"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.24
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            /home/runner/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - name: Go lint (optional)
+        run: |
+          cd services/api
+          go vet ./...
+          # consider adding staticcheck later
+
+      - name: Run Go tests
+        run: |
+          cd services/api
+          go test ./... -v
+
+      - name: Build Go binaries
+        run: |
+          cd services/api
+          CGO_ENABLED=0 go build -o marketlens-api ./cmd/server
+          CGO_ENABLED=0 go build -o marketlens-migrate ./cmd/migrate
+          CGO_ENABLED=0 go build -o marketlens-ingest ./cmd/ingest
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            apps/admin-dashboard/node_modules
+            ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/apps/admin-dashboard/package-lock.json') }}
+
+      - name: Build frontend
+        working-directory: apps/admin-dashboard
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build docker image (local tag)
+        uses: docker/build-push-action@v4
+        with:
+          push: false
+          tags: marketlens/marketlens-api:ci-${{ github.sha }}
+          context: .
+          file: infra/docker/Dockerfile.api
+
+      # Optional: push to registry if secrets provided
+      - name: Push image to Docker Hub
+        if: ${{ secrets.DOCKERHUB_USERNAME && secrets.DOCKERHUB_TOKEN }}
+        uses: docker/build-push-action@v4
+        with:
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/marketlens-api:latest
+          context: .
+          file: infra/docker/Dockerfile.api
+        env:
+          DOCKER_BUILDKIT: 1

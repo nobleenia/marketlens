@@ -1,8 +1,34 @@
-import { Loader2, Store, MapPin } from 'lucide-react';
-import { useMarkets } from '../../api/hooks';
+import { useState } from 'react';
+import { Loader2, Store, MapPin, Plus, X } from 'lucide-react';
+import { useMarkets, useCreateMarket } from '../../api/hooks';
 
 export default function MarketsPage() {
   const { data: markets = [], isLoading, isError } = useMarkets();
+  const [showForm, setShowForm] = useState(false);
+  const [name, setName] = useState('');
+  const [state, setState] = useState('');
+  const [country, setCountry] = useState('NG');
+  const [lat, setLat] = useState('');
+  const [lng, setLng] = useState('');
+  const createMarket = useCreateMarket();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !state.trim()) return;
+    try {
+      await createMarket.mutateAsync({
+        name: name.trim(),
+        state: state.trim(),
+        country: country.trim() || 'NG',
+        latitude: lat ? Number(lat) : 0,
+        longitude: lng ? Number(lng) : 0,
+      });
+      setName(''); setState(''); setLat(''); setLng('');
+      setShowForm(false);
+    } catch {
+      // error is available via createMarket.error
+    }
+  };
 
   // Group by state for a cleaner view
   const byState = markets.reduce<Record<string, typeof markets>>((acc, m) => {
@@ -34,17 +60,102 @@ export default function MarketsPage() {
       {!isLoading && !isError && (
         <>
           <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div>
-                <p className="text-sm text-gray-600">Total Markets</p>
-                <p className="text-3xl font-bold text-[#1a5f3f]">{markets.length}</p>
+            <div className="flex items-center justify-between">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 flex-1">
+                <div>
+                  <p className="text-sm text-gray-600">Total Markets</p>
+                  <p className="text-3xl font-bold text-[#1a5f3f]">{markets.length}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">States Covered</p>
+                  <p className="text-3xl font-bold text-[#1a5f3f]">{states.length}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-gray-600">States Covered</p>
-                <p className="text-3xl font-bold text-[#1a5f3f]">{states.length}</p>
-              </div>
+              <button
+                onClick={() => setShowForm(!showForm)}
+                className="flex items-center gap-2 px-4 py-2 bg-[#1a5f3f] text-white rounded-lg hover:bg-[#155232] transition-colors text-sm font-medium"
+              >
+                {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                {showForm ? 'Cancel' : 'Add Market'}
+              </button>
             </div>
           </div>
+
+          {/* Add Market Form */}
+          {showForm && (
+            <div className="bg-white rounded-xl shadow-md p-6 mb-6 border-2 border-blue-200 bg-blue-50">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">New Market</h3>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Market Name *</label>
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Bodija Market"
+                      className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a5f3f] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">State *</label>
+                    <input
+                      value={state}
+                      onChange={(e) => setState(e.target.value)}
+                      placeholder="e.g. Oyo"
+                      className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a5f3f] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                    <input
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                      className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a5f3f] focus:outline-none"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Latitude</label>
+                      <input
+                        value={lat}
+                        onChange={(e) => setLat(e.target.value)}
+                        placeholder="0.0"
+                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a5f3f] focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Longitude</label>
+                      <input
+                        value={lng}
+                        onChange={(e) => setLng(e.target.value)}
+                        placeholder="0.0"
+                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a5f3f] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="submit"
+                    disabled={createMarket.isPending || !name.trim() || !state.trim()}
+                    className="px-6 py-2 bg-[#1a5f3f] text-white rounded-lg hover:bg-[#155232] transition-colors text-sm font-medium disabled:opacity-50"
+                  >
+                    {createMarket.isPending ? 'Creating...' : 'Create Market'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowForm(false)}
+                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {createMarket.isError && (
+                  <p className="text-red-600 text-sm">{createMarket.error?.message || 'Failed to create market'}</p>
+                )}
+              </form>
+            </div>
+          )}
 
           {states.map((state) => (
             <div key={state} className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">

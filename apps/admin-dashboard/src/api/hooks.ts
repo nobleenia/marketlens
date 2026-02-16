@@ -115,3 +115,44 @@ export function useUpdateObservationStatus() {
     },
   });
 }
+
+// Create crop
+export function useCreateCrop() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    { id: string },
+    Error,
+    { name: string; unit?: string }
+  >({
+    mutationFn: ({ name, unit }) =>
+      apiFetch('/v1/admin/crops', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, unit }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['crops']});
+    },
+  });
+}
+
+// Create market
+export function useCreateMarket() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { id: string },
+    Error,
+    { name: string; state: string; country?: string; latitude?: number; longitude?: number }
+  >({
+    mutationFn: (payload) =>
+      apiFetch('/v1/admin/markets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['markets'] });
+    },
+  });
+}
