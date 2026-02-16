@@ -128,7 +128,7 @@ export default function PublicLayout() {
             {/* Quick Links */}
             <div>
               <h4 className="font-semibold mb-3">Quick Links</h4>
-              <ul className="space-y-2 text-sm text-white/70">
+              <ul className="grid grid-cols-2 gap-y-2 gap-x-0 text-sm text-white/70">
                 {navLinks.map((link) => (
                   <li key={link.to}>
                     <Link to={link.to} className="hover:text-white transition-colors">

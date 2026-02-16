@@ -1,8 +1,26 @@
-import { Loader2, Sprout } from 'lucide-react';
-import { useCrops } from '../../api/hooks';
+import { useState } from 'react';
+import { Loader2, Sprout, Plus, X } from 'lucide-react';
+import { useCrops, useCreateCrop } from '../../api/hooks';
 
 export default function CropsPage() {
   const { data: crops = [], isLoading, isError } = useCrops();
+  const [showForm, setShowForm] = useState(false);
+  const [name, setName] = useState('');
+  const [unit, setUnit] = useState('kg');
+  const createCrop = useCreateCrop();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    try {
+      await createCrop.mutateAsync({ name: name.trim(), unit });
+      setName('');
+      setUnit('kg');
+      setShowForm(false);
+    } catch {
+      // error is available via createCrop.error
+    }
+  };
 
   return (
     <div className="p-6 md:p-8">
@@ -30,7 +48,50 @@ export default function CropsPage() {
             <h2 className="text-lg font-semibold text-gray-900">
               {crops.length} crop{crops.length !== 1 ? 's' : ''} registered
             </h2>
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="flex items-center gap-2 px-4 py-2 bg-[#1a5f3f] text-white rounded-lg hover:bg-[#155232] transition-colors text-sm font-medium"
+            >
+              {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+              {showForm ? 'Cancel' : 'Add Crop'}
+            </button>
           </div>
+
+          {/* Add Crop Form */}
+          {showForm && (
+            <div className="p-6 border-b border-gray-200 bg-green-50">
+              <form onSubmit={handleSubmit} className="flex flex-col md:flex-row gap-4 items-end">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Crop Name</label>
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Groundnuts"
+                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a5f3f] focus:outline-none"
+                  />
+                </div>
+                <div className="w-full md:w-40">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+                  <input
+                    value={unit}
+                    onChange={(e) => setUnit(e.target.value)}
+                    placeholder="kg"
+                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a5f3f] focus:outline-none"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={createCrop.isPending || !name.trim()}
+                  className="px-6 py-2 bg-[#1a5f3f] text-white rounded-lg hover:bg-[#155232] transition-colors text-sm font-medium disabled:opacity-50 whitespace-nowrap"
+                >
+                  {createCrop.isPending ? 'Creating...' : 'Create Crop'}
+                </button>
+              </form>
+              {createCrop.isError && (
+                <p className="text-red-600 text-sm mt-2">{createCrop.error?.message || 'Failed to create crop'}</p>
+              )}
+            </div>
+          )}
 
           {/* Desktop Table */}
           <div className="hidden md:block overflow-x-auto">

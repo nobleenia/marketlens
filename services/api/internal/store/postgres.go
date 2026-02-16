@@ -622,3 +622,21 @@ func (pg *Postgres) ListAuditLogs(ctx context.Context, entityType, entityID stri
 	}
 	return results, total, rows.Err()
 }
+
+// InsertMarket creates a new market and returns its ID.
+func (pg *Postgres) InsertMarket(ctx context.Context, name, state, country string, latitude, longitude float64) (string, error) {
+	var id string
+	err := pg.pool.QueryRow(ctx, `
+        INSERT INTO markets (name, state, country, latitude, longitude)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (LOWER(name), LOWER(state)) DO UPDATE
+          SET country = EXCLUDED.country,
+              latitude = EXCLUDED.latitude,
+              longitude = EXCLUDED.longitude
+        RETURNING id
+    `, name, state, country, latitude, longitude).Scan(&id)
+	if err != nil {
+		return "", fmt.Errorf("InsertMarket: %w", err)
+	}
+	return id, nil
+}

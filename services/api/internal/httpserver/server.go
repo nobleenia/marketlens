@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -60,6 +61,7 @@ func New(cfg config.Config, db *store.Postgres, ussdH *ussd.Handler) *http.Serve
 
 func (s *Server) routes() {
 	s.mux.HandleFunc("/healthz", s.handleHealth)
+	s.mux.HandleFunc("/ready", s.handleReady)
 	s.mux.HandleFunc("/", s.handleRoot)
 
 	// API endpoints
@@ -74,6 +76,8 @@ func (s *Server) routes() {
 	adminMux.HandleFunc("/v1/admin/observations", s.handleListObservations)
 	adminMux.HandleFunc("/v1/admin/observations/", s.handleAdminObservation) // PATCH /v1/admin/observations/{id}
 	adminMux.HandleFunc("/v1/admin/audit", s.handleListAuditLogs)
+	adminMux.HandleFunc("/v1/admin/crops", s.handleAdminCreateCrop)     // POST
+	adminMux.HandleFunc("/v1/admin/markets", s.handleAdminCreateMarket) // POST
 
 	adminHandler := auth.APIKeyAuth(s.cfg.AdminAPIKey)(adminMux)
 	s.mux.Handle("/v1/admin/", adminHandler)
@@ -89,6 +93,22 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"status":    "ok",
 		"timestamp": time.Now(),
 	})
+}
+
+// handleReady checks readiness of required dependencies (DB)
+func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	if err := s.db.Ping(ctx); err != nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		writeJSON(w, map[string]interface{}{
+			"status":    "unready",
+			"error":     err.Error(),
+			"timestamp": time.Now(),
+		})
+		return
+	}
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
@@ -287,12 +307,6 @@ func (s *Server) handlePostObservation(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"status": "created"})
 }
 
-// writeJSON is a small helper to avoid repeating Content-Type + Encode.
-func writeJSON(w http.ResponseWriter, v interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(v)
-}
-
 func (s *Server) handleListObservations(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -416,6 +430,73 @@ func (s *Server) handleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleAdminCreateCrop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+		Unit string `json:"unit"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		http.Error(w, "name required", http.StatusBadRequest)
+		return
+	}
+	if req.Unit == "" {
+		req.Unit = "kg"
+	}
+	ctx := r.Context()
+	id, err := s.db.InsertCrop(ctx, req.Name, req.Unit)
+	if err != nil {
+		log.Printf("handleAdminCreateCrop InsertCrop error: %v", err)
+		http.Error(w, "failed to create crop", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	writeJSON(w, map[string]string{"id": id})
+}
+
+func (s *Server) handleAdminCreateMarket(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Name      string  `json:"name"`
+		State     string  `json:"state"`
+		Country   string  `json:"country"`
+		Latitude  float64 `json:"latitude"`
+		Longitude float64 `json:"longitude"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" || req.State == "" {
+		http.Error(w, "name and state required", http.StatusBadRequest)
+		return
+	}
+	if req.Country == "" {
+		req.Country = "NG"
+	}
+	ctx := r.Context()
+	id, err := s.db.InsertMarket(ctx, req.Name, req.State, req.Country, req.Latitude, req.Longitude)
+	if err != nil {
+		log.Printf("handleAdminCreateMarket InsertMarket error: %v", err)
+		http.Error(w, "failed to create market", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	writeJSON(w, map[string]string{"id": id})
+}
+
 // intParam parses a query string int with a default fallback.
 func intParam(s string, defaultVal int) int {
 	if s == "" {
@@ -426,4 +507,10 @@ func intParam(s string, defaultVal int) int {
 		return defaultVal
 	}
 	return n
+}
+
+// writeJSON is a small helper to avoid repeating Content-Type + Encode.
+func writeJSON(w http.ResponseWriter, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(v)
 }

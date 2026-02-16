@@ -22,5 +22,5 @@ COPY --from=build /bin/marketlens-migrate ./marketlens-migrate
 COPY --from=build /bin/marketlens-ingest ./marketlens-ingest
 COPY --from=build /app/services/api/data ./data
 
-EXPOSE 8080
+EXPOSE 8081
 ENTRYPOINT ["./marketlens-api"]
